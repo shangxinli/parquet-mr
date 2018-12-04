@@ -64,6 +64,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Types;
 import org.apache.parquet.bytes.HeapByteBufferAllocator;
 
+
 public class TestColumnChunkPageWriteStore {
 
   private int pageSize = 1024;
@@ -176,7 +177,7 @@ public class TestColumnChunkPageWriteStore {
 
     for (ColumnDescriptor col : schema.getColumns()) {
       inOrder.verify(mockFileWriter).startColumn(
-          eq(col), eq((long) fakeCount), eq(UNCOMPRESSED));
+        eq(col), eq((long) fakeCount), eq(UNCOMPRESSED));
     }
   }
 

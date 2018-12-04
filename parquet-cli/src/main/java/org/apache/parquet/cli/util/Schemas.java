@@ -26,6 +26,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
 import org.apache.parquet.cli.json.AvroJson;
+import org.apache.parquet.crypto.FileDecryptionProperties;
+import org.apache.parquet.crypto.InternalFileDecryptor;
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileStream;
 import org.apache.avro.generic.GenericDatumReader;
@@ -69,10 +71,14 @@ public class Schemas {
   }
 
   public static Schema fromParquet(Configuration conf, URI location) throws IOException {
+    return fromParquet(conf, location, (FileDecryptionProperties) null);
+  }
+
+  public static Schema fromParquet(Configuration conf, URI location, FileDecryptionProperties fileDecryptionProperties) throws IOException {
     Path path = new Path(location);
     FileSystem fs = path.getFileSystem(conf);
 
-    ParquetMetadata footer = ParquetFileReader.readFooter(fs.getConf(), path);
+    ParquetMetadata footer = ParquetFileReader.readFooter(fs.getConf(), path, fileDecryptionProperties);
 
     String schemaString = footer.getFileMetaData()
         .getKeyValueMetaData().get("parquet.avro.schema");

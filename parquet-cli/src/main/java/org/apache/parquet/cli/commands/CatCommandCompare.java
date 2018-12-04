@@ -24,7 +24,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.io.Closeables;
 import org.apache.avro.Schema;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.cli.BaseCommand;
 import org.apache.parquet.cli.util.Expressions;
 import org.apache.parquet.crypto.FileDecryptionProperties;
@@ -34,36 +33,30 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.List;
 
-import static org.apache.parquet.cli.util.Expressions.select;
 
 @Parameters(commandDescription = "Print the first N records from a file")
-public class CatCommand extends BaseCommand {
+public class CatCommandCompare extends BaseCommand {
 
   @Parameter(description = "<file>")
   List<String> sourceFiles;
 
-  @Parameter(names={"-n", "--num-records"},
-      description="The number of records to print")
-  long numRecords;
 
   @Parameter(
       names = {"-c", "--column", "--columns"},
       description = "List of columns")
   List<String> columns;
 
-  @Parameter(names={"-e", "--encrypted-file"},
-      description="Cat an encrypted Parquet file")
-  boolean encrypt = false;
 
   @Parameter(names={"--key"},
       description="Encryption key (base64 string)")
   String encodedKey;
 
-  public CatCommand(Logger console, long defaultNumRecords) {
+  public CatCommandCompare(Logger console, long defaultNumRecords) {
     super(console);
-    this.numRecords = defaultNumRecords;
+    //this.numRecords = defaultNumRecords;
   }
 
   @Override
@@ -75,61 +68,64 @@ public class CatCommand extends BaseCommand {
         "Only one file can be given");
 
     final String source = sourceFiles.get(0);
+    final String esource = source+".encrypted";
 
-    FileDecryptionProperties dSetup = null;
-    if (encrypt) {
-      byte[] keyBytes;
-      if (null == encodedKey) {
-        keyBytes = new byte[16];
-        for (byte i=0; i < 16; i++) {keyBytes[i] = i;}
-        String sampleKey = Base64.getEncoder().encodeToString(keyBytes);
-        console.info("Decrypting with a sample key: " +sampleKey);
-      }
-      else {
-        keyBytes = Base64.getDecoder().decode(encodedKey);
-      }
-
-      StringKeyIdRetriever kr = new StringKeyIdRetriever();
-      kr.putKey("kf", keyBytes);
-
-      for (int c=0; c < 20; c++) {
-
-        byte[] colKeyBytes = new byte[16]; 
-        for (byte i=0; i < 16; i++) {colKeyBytes[i] = (byte)(i*(c+2));}
-
-        kr.putKey("kc"+c, colKeyBytes);
-      }
-
-
-      byte[] aad = source.getBytes(StandardCharsets.UTF_8);
-      console.info("AAD Prefix: "+source+". Len: "+aad.length);
-
-
-      dSetup = FileDecryptionProperties.builder()
-          .withKeyRetriever(kr)
-          //.withPlaintextFilesAllowed()
-          //.withAADPrefix(aad)
-          .build();
+    byte[] keyBytes;
+    if (null == encodedKey) {
+      keyBytes = new byte[16];
+      for (byte i=0; i < 16; i++) {keyBytes[i] = i;}
+      String sampleKey = Base64.getEncoder().encodeToString(keyBytes);
+      console.info("Decrypting with a sample key: " +sampleKey);
+    }
+    else {
+      keyBytes = Base64.getDecoder().decode(encodedKey);
     }
 
-    Configuration conf = getConf();
+    StringKeyIdRetriever kr = new StringKeyIdRetriever();
+    kr.putKey("kf", keyBytes);
 
-    Schema schema = getAvroSchema(source, dSetup);
+    for (int c=0; c < 20; c++) {
+
+      byte[] colKeyBytes = new byte[16]; 
+      for (byte i=0; i < 16; i++) {colKeyBytes[i] = (byte)(i*(c+2));}
+
+      kr.putKey("kc"+c, colKeyBytes);
+    }
+
+    byte[] aad = esource.getBytes(StandardCharsets.UTF_8);
+    console.info("AAD Prefix: "+esource+". Len: "+aad.length);
+
+
+    FileDecryptionProperties dSetup = FileDecryptionProperties.builder()
+        .withKeyRetriever(kr)
+        //.withAADPrefix(aad)
+        .build();
+    
+
+    Schema schema = getAvroSchema(source);
     Schema projection = Expressions.filterSchema(schema, columns);
+    Iterator<Object> reader = openDataFile(source, projection).iterator();
 
-    Iterable<Object> reader = openDataFile(source, projection, dSetup);
+    Schema eschema = getAvroSchema(esource, dSetup);
+    Schema eprojection = Expressions.filterSchema(eschema, columns);
+    Iterator<Object> ereader = openDataFile(esource, eprojection, dSetup).iterator();
+
+
     boolean threw = true;
     long count = 0;
     try {
-      for (Object record : reader) {
-        if (numRecords > 0 && count >= numRecords) {
-          break;
+      while (reader.hasNext()) {
+        Object record = reader.next();
+        Object erecord = ereader.next();
+        //if (columns == null || columns.size() != 1) {
+        String r = String.valueOf(record);
+        String er = String.valueOf(erecord);
+        if (!r.equals(er)) {
+          console.info("Error :\n"+r+"\n"+er);
         }
-        if (columns == null || columns.size() != 1) {
-          console.info(String.valueOf(record));
-        } else {
-          console.info(String.valueOf(select(projection, record, columns.get(0))));
-        }
+        //} else {
+        // console.info(String.valueOf(select(projection, record, columns.get(0))));
+        //}
         count += 1;
       }
       threw = false;
@@ -140,6 +136,8 @@ public class CatCommand extends BaseCommand {
         Closeables.close((Closeable) reader, threw);
       }
     }
+
+    console.info("Identical data. Compared "+count+ " lines");
 
     return 0;
   }

@@ -27,14 +27,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import org.apache.parquet.cli.commands.CSVSchemaCommand;
 import org.apache.parquet.cli.commands.CatCommand;
+import org.apache.parquet.cli.commands.CatCommandCompare;
 import org.apache.parquet.cli.commands.CheckParquet251Command;
 import org.apache.parquet.cli.commands.ConvertCSVCommand;
 import org.apache.parquet.cli.commands.ConvertCommand;
+import org.apache.parquet.cli.commands.EncryptionTest;
 import org.apache.parquet.cli.commands.ParquetMetadataCommand;
 import org.apache.parquet.cli.commands.SchemaCommand;
 import org.apache.parquet.cli.commands.ShowDictionaryCommand;
 import org.apache.parquet.cli.commands.ShowPagesCommand;
 import org.apache.parquet.cli.commands.ToAvroCommand;
+import org.apache.parquet.cli.commands.EncryptionReaderWriterAllCryptoOptions;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
@@ -87,6 +90,9 @@ public class Main extends Configured implements Tool {
     jc.addCommand("to-avro", new ToAvroCommand(console));
     jc.addCommand("cat", new CatCommand(console, 0));
     jc.addCommand("head", new CatCommand(console, 10));
+    jc.addCommand("catc", new CatCommandCompare(console, 0)); //TODO remove
+    jc.addCommand("et", new EncryptionTest(console, 0)); //TODO remove
+    jc.addCommand("eit", new EncryptionReaderWriterAllCryptoOptions(console));
   }
 
   @Override

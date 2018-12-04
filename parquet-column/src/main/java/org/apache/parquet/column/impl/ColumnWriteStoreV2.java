@@ -63,7 +63,7 @@ public class ColumnWriteStoreV2 implements ColumnWriteStore {
     this.columns = unmodifiableMap(mcolumns);
     this.writers = this.columns.values();
 
-    this.rowCountForNextSizeCheck = props.getMinRowCountForPageSizeCheck();
+    this.rowCountForNextSizeCheck = min(props.getMinRowCountForPageSizeCheck(), props.getPageRowCountLimit());
   }
 
   public ColumnWriter getColumnWriter(ColumnDescriptor path) {
@@ -141,13 +141,17 @@ public class ColumnWriteStoreV2 implements ColumnWriteStore {
 
   private void sizeCheck() {
     long minRecordToWait = Long.MAX_VALUE;
+    int pageRowCountLimit = props.getPageRowCountLimit();
+    long rowCountForNextRowCountCheck = rowCount + pageRowCountLimit;
     for (ColumnWriterV2 writer : writers) {
       long usedMem = writer.getCurrentPageBufferedSize();
       long rows = rowCount - writer.getRowsWrittenSoFar();
       long remainingMem = props.getPageSizeThreshold() - usedMem;
-      if (remainingMem <= thresholdTolerance) {
+      if (remainingMem <= thresholdTolerance || rows >= pageRowCountLimit) {
         writer.writePage(rowCount);
         remainingMem = props.getPageSizeThreshold();
+      } else {
+        rowCountForNextRowCountCheck = min(rowCountForNextRowCountCheck, writer.getRowsWrittenSoFar() + pageRowCountLimit);
       }
       long rowsToFillPage =
           usedMem == 0 ?
@@ -169,6 +173,11 @@ public class ColumnWriteStoreV2 implements ColumnWriteStore {
               props.getMaxRowCountForPageSizeCheck());
     } else {
       rowCountForNextSizeCheck = rowCount + props.getMinRowCountForPageSizeCheck();
+    }
+
+    // Do the check earlier if required to keep the row count limit
+    if (rowCountForNextRowCountCheck < rowCountForNextSizeCheck) {
+      rowCountForNextSizeCheck = rowCountForNextRowCountCheck;
     }
   }
 
