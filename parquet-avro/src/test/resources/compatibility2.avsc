@@ -1,0 +1,30 @@
+{
+  "type":"record",
+  "name":"whatever",
+  "fields":[
+     {
+       "name":"name1",
+       "type":[
+          "null",
+           {
+             "type":"array",
+               "items":
+                 {
+                   "type":"record",
+                   "name":"name2",
+                   "fields":[
+                      {
+                        "name":"name3",
+                        "type":[
+                           "null","string"
+                         ],
+                         "default":null
+                       }
+                   ]
+                  }
+            }
+        ],
+        "default":null
+      }
+   ]
+}

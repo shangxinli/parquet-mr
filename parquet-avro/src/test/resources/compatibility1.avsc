@@ -1,0 +1,23 @@
+{
+  "name" : "myrecord",
+  "namespace": "org.apache.parquet.avro",
+  "type" : "record",
+  "fields" : [ {
+    "name" : "flatrecord",
+    "type" : "int"
+  }, {
+    "name" : "nestedrecord",
+    "type" : {
+      "type" : "record",
+      "name" : "ignored",
+      "namespace" : "",
+      "fields" : [ {
+        "name" : "nestedint1",
+        "type" : "int"
+      }, {
+          "name" : "nestedint2",
+          "type" : "int"
+      }]
+    }
+  }]
+}

@@ -18,6 +18,9 @@
  */
 package org.apache.parquet.avro;
 
+import static org.apache.avro.SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE;
+import static org.apache.avro.SchemaCompatibility.checkReaderWriterCompatibility;
+
 import com.google.common.collect.Lists;
 import com.google.common.io.Resources;
 import org.apache.avro.JsonProperties;
@@ -798,5 +801,22 @@ public class TestAvroSchemaConverter {
         throw e;
       }
     }
+  }
+
+  @Test
+  public void testCompatibility() throws Exception {
+    String[] files = {"compatibility1.avsc", "compatibility2.avsc"};
+    for (String file : files) {
+      verifyCompatibility(file);
+    }
+  }
+
+  private void verifyCompatibility(String schemaFile) throws Exception {
+    Schema avroSchema = new Schema.Parser().parse(Resources.getResource(schemaFile).openStream());
+    AvroSchemaConverter avroSchemaConverter = new AvroSchemaConverter(false);
+    MessageType parquetSchema = avroSchemaConverter.convert(avroSchema);
+    Schema convertedAvroSchema = avroSchemaConverter.convert(parquetSchema.asGroupType());
+
+    assertEquals(COMPATIBLE, checkReaderWriterCompatibility(convertedAvroSchema, avroSchema).getType());
   }
 }

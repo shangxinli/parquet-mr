@@ -24,6 +24,7 @@ import org.apache.avro.Schema;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.schema.ConversionPatterns;
+import org.apache.parquet.schema.ExtType;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
@@ -69,6 +70,7 @@ public class AvroSchemaConverter {
 
   private final boolean assumeRepeatedIsListElement;
   private final boolean writeOldListStructure;
+  private final String ALIAS_NAME = "record_alias_name";
 
   public AvroSchemaConverter() {
     this.assumeRepeatedIsListElement = ADD_LIST_ELEMENT_RECORDS_DEFAULT;
@@ -160,7 +162,8 @@ public class AvroSchemaConverter {
     } else if (type.equals(Schema.Type.STRING)) {
       builder = Types.primitive(BINARY, repetition).as(stringType());
     } else if (type.equals(Schema.Type.RECORD)) {
-      return new GroupType(repetition, fieldName, convertFields(schema.getFields()));
+      Type record = new GroupType(repetition, fieldName, convertFields(schema.getFields()));
+      return addMetadata(fieldName, schema.getName(), record);
     } else if (type.equals(Schema.Type.ENUM)) {
       builder = Types.primitive(BINARY, repetition).as(enumType());
     } else if (type.equals(Schema.Type.ARRAY)) {
@@ -393,12 +396,13 @@ public class AvroSchemaConverter {
 
           @Override
           public Optional<Schema> visit(LogicalTypeAnnotation.EnumLogicalTypeAnnotation enumLogicalType) {
+
             return of(Schema.create(Schema.Type.STRING));
           }
         }).orElseThrow(() -> new UnsupportedOperationException("Cannot convert Parquet type " + parquetType));
       } else {
         // if no original type then it's a record
-        return convertFields(parquetGroupType.getName(), parquetGroupType.getFields(), names);
+        return convertFields(getOriginalName(parquetType), parquetGroupType.getFields(), names);
       }
     }
   }
@@ -492,5 +496,28 @@ public class AvroSchemaConverter {
     return Schema.createUnion(Arrays.asList(
         Schema.create(Schema.Type.NULL),
         original));
+  }
+
+  private Type addMetadata(String fieldName, String schemaName, Type record) {
+    if (fieldName == null || schemaName == null || fieldName.equals(schemaName)) {
+      return record;
+    }
+
+    ExtType extType = new ExtType<>(record);
+    Map<String, String> metadata = new HashMap<>();
+    metadata.put(ALIAS_NAME, schemaName);
+    extType.setMetadata(metadata);
+    return extType;
+  }
+
+  private String getOriginalName(Type parquetSchema) {
+    if (parquetSchema instanceof ExtType){
+      ExtType extType = (ExtType) parquetSchema;
+      if (extType.getMetadata() != null && extType.getMetadata().containsKey(ALIAS_NAME)) {
+        return (String) extType.getMetadata().get(ALIAS_NAME);
+      }
+    }
+
+    return parquetSchema.asGroupType().getName();
   }
 }
