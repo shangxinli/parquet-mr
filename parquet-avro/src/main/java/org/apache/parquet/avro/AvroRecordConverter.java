@@ -752,7 +752,7 @@ class AvroRecordConverter<T> extends AvroConverters.AvroGroupConverter {
       return true;
     } else if (elementSchema != null &&
         elementSchema.getType() == Schema.Type.RECORD &&
-        elementSchema.getFields().size() == 1 &&
+        elementSchema.getFields().size() >= 1 &&
         elementSchema.getFields().get(0).name().equals(
             repeatedType.asGroupType().getFieldName(0))) {
       // The repeated type must be the element type because it matches the
