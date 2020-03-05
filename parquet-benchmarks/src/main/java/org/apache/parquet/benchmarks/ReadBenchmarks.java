@@ -116,9 +116,17 @@ public class ReadBenchmarks {
   @Benchmark
   @BenchmarkMode(Mode.SingleShotTime)
   public void read1MRowsDefaultBlockAndPageSizeSNAPPY(Blackhole blackhole)
-          throws IOException
+    throws IOException
   {
     read(file_1M_SNAPPY, ONE_MILLION, blackhole);
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.SingleShotTime)
+  public void read1MRowsDefaultBlockAndPageSizeZSTD(Blackhole blackhole)
+    throws IOException
+  {
+    read(file_1M_ZSTD, ONE_MILLION, blackhole);
   }
 
   @Benchmark

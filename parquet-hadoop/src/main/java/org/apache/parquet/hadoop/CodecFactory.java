@@ -230,6 +230,7 @@ public class CodecFactory implements CompressionCodecFactory {
       Class<?> codecClass = Class.forName(codecClassName);
       codec = (CompressionCodec) ReflectionUtils.newInstance(codecClass, configuration);
       CODEC_BY_NAME.put(codecClassName, codec);
+
       return codec;
     } catch (ClassNotFoundException e) {
       throw new BadConfigurationException("Class " + codecClassName + " was not found", e);

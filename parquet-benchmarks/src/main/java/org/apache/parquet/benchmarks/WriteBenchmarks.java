@@ -25,6 +25,7 @@ import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 
+import static org.apache.parquet.hadoop.metadata.CompressionCodecName.ZSTD;
 import static org.openjdk.jmh.annotations.Scope.Thread;
 import static org.apache.parquet.benchmarks.BenchmarkConstants.*;
 import static org.apache.parquet.benchmarks.BenchmarkFiles.*;
@@ -149,6 +150,21 @@ public class WriteBenchmarks {
                                FIXED_LEN_BYTEARRAY_SIZE,
                                SNAPPY,
                                ONE_MILLION);
+  }
+
+  @Benchmark
+  @BenchmarkMode(Mode.SingleShotTime)
+  public void write1MRowsDefaultBlockAndPageSizeZSTD()
+    throws IOException
+  {
+    dataGenerator.generateData(file_1M_SNAPPY,
+      configuration,
+      PARQUET_2_0,
+      BLOCK_SIZE_DEFAULT,
+      PAGE_SIZE_DEFAULT,
+      FIXED_LEN_BYTEARRAY_SIZE,
+      ZSTD,
+      ONE_MILLION);
   }
 
   @Benchmark
