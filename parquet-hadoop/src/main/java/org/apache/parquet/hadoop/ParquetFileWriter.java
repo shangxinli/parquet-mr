@@ -100,7 +100,7 @@ public class ParquetFileWriter {
   }
 
   private final MessageType schema;
-  private final PositionOutputStream out;
+  public final PositionOutputStream out;
   private final AlignmentStrategy alignment;
   private final int columnIndexTruncateLength;
 
@@ -112,11 +112,11 @@ public class ParquetFileWriter {
   private final List<List<OffsetIndex>> offsetIndexes = new ArrayList<>();
 
   // row group data
-  private BlockMetaData currentBlock; // appended to by endColumn
+  public BlockMetaData currentBlock; // appended to by endColumn
 
   // The column/offset indexes for the actual block
-  private List<ColumnIndex> currentColumnIndexes;
-  private List<OffsetIndex> currentOffsetIndexes;
+  public List<ColumnIndex> currentColumnIndexes;
+  public List<OffsetIndex> currentOffsetIndexes;
 
   // row group data set at the start of a row group
   private long currentRecordCount; // set in startBlock
@@ -766,6 +766,133 @@ public class ParquetFileWriter {
           Strings.join(columnsToCopy.keySet(), ", ")));
     }
 
+    StreamPara para = new StreamPara(-1, 0, 0);
+    for (int i = 0; i < columnsInOrder.size(); i += 1) {
+      appendColumnChunk(from, para, columnsInOrder, i);
+    }
+
+    currentBlock.setTotalByteSize(para.blockUncompressedSize);
+
+    endBlock();
+  }
+
+  public void appendColumnChunk(SeekableInputStream from, StreamPara para, List<ColumnChunkMetaData> columnsInOrder,
+                                int columnIndex) throws IOException {
+    ColumnChunkMetaData chunk = columnsInOrder.get(columnIndex);
+
+    // get this chunk's start position in the new file
+    long newChunkStart = out.getPos() + para.length;
+
+    // add this chunk to be copied with any previous chunks
+    if (para.start < 0) {
+      // no previous chunk included, start at this chunk's starting pos
+      para.start = chunk.getStartingPos();
+    }
+    para.length += chunk.getTotalSize();
+
+    if ((columnIndex + 1) == columnsInOrder.size() ||
+      columnsInOrder.get(columnIndex + 1).getStartingPos() != (para.start + para.length)) {
+      // not contiguous. do the copy now.
+      copy(from, out, para.start, para.length);
+      // reset to start at the next column chunk
+      para.start = -1;
+      para.length = 0;
+    }
+
+    // TODO: column/offset indexes are not copied
+    // (it would require seeking to the end of the file for each row groups)
+    currentColumnIndexes.add(null);
+    currentOffsetIndexes.add(null);
+
+    currentBlock.addColumn(ColumnChunkMetaData.get(
+      chunk.getPath(),
+      chunk.getPrimitiveType(),
+      chunk.getCodec(),
+      chunk.getEncodingStats(),
+      chunk.getEncodings(),
+      chunk.getStatistics(),
+      newChunkStart,
+      newChunkStart,
+      chunk.getValueCount(),
+      chunk.getTotalSize(),
+      chunk.getTotalUncompressedSize()));
+
+    para.blockUncompressedSize += chunk.getTotalUncompressedSize();
+  }
+
+
+  public static class StreamPara {
+    private long start;
+    private long length;
+    private long blockUncompressedSize;
+
+    public StreamPara(long start, long length, long blockUncompressedSize) {
+      this.start = start;
+      this.length = length;
+      this.blockUncompressedSize = blockUncompressedSize;
+    }
+
+    public long getStart() {
+      return this.start;
+    }
+
+    public long length() {
+      return this.length;
+    }
+
+    public long getSize() {
+      return this.blockUncompressedSize;
+    }
+
+    public void setStart(long start) {
+      this.start = start;
+    }
+
+    public void setLength(long length) {
+      this.length = length;
+    }
+
+    public void setSize(long blockUncompressedSize) {
+      this.blockUncompressedSize = blockUncompressedSize;
+    }
+  }
+
+  public void appendRowGroup2(SeekableInputStream from, BlockMetaData rowGroup,
+                             boolean dropColumns) throws IOException {
+    startBlock(rowGroup.getRowCount());
+    appendRowGroup3(from, rowGroup, dropColumns);
+    endBlock();
+  }
+
+  public void appendRowGroup3(SeekableInputStream from, BlockMetaData rowGroup,
+                              boolean dropColumns) throws IOException {
+    Map<String, ColumnChunkMetaData> columnsToCopy =
+      new HashMap<String, ColumnChunkMetaData>();
+    for (ColumnChunkMetaData chunk : rowGroup.getColumns()) {
+      columnsToCopy.put(chunk.getPath().toDotString(), chunk);
+    }
+
+    List<ColumnChunkMetaData> columnsInOrder =
+      new ArrayList<ColumnChunkMetaData>();
+
+    for (ColumnDescriptor descriptor : schema.getColumns()) {
+      String path = ColumnPath.get(descriptor.getPath()).toDotString();
+      ColumnChunkMetaData chunk = columnsToCopy.remove(path);
+      if (chunk != null) {
+        columnsInOrder.add(chunk);
+      } else {
+        throw new IllegalArgumentException(String.format(
+          "Missing column '%s', cannot copy row group: %s", path, rowGroup));
+      }
+    }
+
+    // complain if some columns would be dropped and that's not okay
+    if (!dropColumns && !columnsToCopy.isEmpty()) {
+      throw new IllegalArgumentException(String.format(
+        "Columns cannot be copied (missing from target schema): %s",
+        Strings.join(columnsToCopy.keySet(), ", ")));
+    }
+
     // copy the data for all chunks
     long start = -1;
     long length = 0;
@@ -784,7 +911,7 @@ public class ParquetFileWriter {
       length += chunk.getTotalSize();
 
       if ((i + 1) == columnsInOrder.size() ||
-          columnsInOrder.get(i + 1).getStartingPos() != (start + length)) {
+        columnsInOrder.get(i + 1).getStartingPos() != (start + length)) {
         // not contiguous. do the copy now.
         copy(from, out, start, length);
         // reset to start at the next column chunk
@@ -798,24 +925,23 @@ public class ParquetFileWriter {
       currentOffsetIndexes.add(null);
 
       currentBlock.addColumn(ColumnChunkMetaData.get(
-          chunk.getPath(),
-          chunk.getPrimitiveType(),
-          chunk.getCodec(),
-          chunk.getEncodingStats(),
-          chunk.getEncodings(),
-          chunk.getStatistics(),
-          newChunkStart,
-          newChunkStart,
-          chunk.getValueCount(),
-          chunk.getTotalSize(),
-          chunk.getTotalUncompressedSize()));
+        chunk.getPath(),
+        chunk.getPrimitiveType(),
+        chunk.getCodec(),
+        chunk.getEncodingStats(),
+        chunk.getEncodings(),
+        chunk.getStatistics(),
+        newChunkStart,
+        newChunkStart,
+        chunk.getValueCount(),
+        chunk.getTotalSize(),
+        chunk.getTotalUncompressedSize()));
 
       blockUncompressedSize += chunk.getTotalUncompressedSize();
     }
 
     currentBlock.setTotalByteSize(blockUncompressedSize);
 
-    endBlock();
   }
 
   // Buffers for the copy function.
@@ -830,7 +956,7 @@ public class ParquetFileWriter {
    * @param length the number of bytes to copy
    * @throws IOException if there is an error while reading or writing
    */
-  private static void copy(SeekableInputStream from, PositionOutputStream to,
+  public static void copy(SeekableInputStream from, PositionOutputStream to,
                            long start, long length) throws IOException{
     LOG.debug("Copying {} bytes at {} to {}" ,length , start , to.getPos());
     from.seek(start);
@@ -1228,5 +1354,9 @@ public class ParquetFileWriter {
     protected boolean isPaddingNeeded(long remaining) {
       return (remaining <= maxPaddingSize);
     }
+  }
+
+  public void setCurrentBlockSize(long size) {
+    this.currentBlock.setTotalByteSize(size);
   }
 }

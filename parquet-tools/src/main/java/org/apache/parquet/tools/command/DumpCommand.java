@@ -333,6 +333,7 @@ public class DumpCommand extends ArgsOnlyCommand {
                 case INT96:
                 case BINARY:
                   out.print(stringifier.stringify(creader.getBinary()));
+                  System.out.println(stringifier.stringify(creader.getBinary()));
                   break;
                 case BOOLEAN:
                   out.print(stringifier.stringify(creader.getBoolean()));
@@ -348,6 +349,7 @@ public class DumpCommand extends ArgsOnlyCommand {
                   break;
                 case INT64:
                   out.print(stringifier.stringify(creader.getLong()));
+                  System.out.println(stringifier.stringify(creader.getLong()));
                   break;
               }
             } else {

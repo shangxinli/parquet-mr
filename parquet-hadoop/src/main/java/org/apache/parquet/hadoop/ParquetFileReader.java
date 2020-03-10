@@ -610,7 +610,7 @@ public class ParquetFileReader implements Closeable {
   }
 
   private final InputFile file;
-  private final SeekableInputStream f;
+  public final SeekableInputStream f;
   private final ParquetReadOptions options;
   private final Map<ColumnPath, ColumnDescriptor> paths = new HashMap<>();
   private final FileMetaData fileMetaData; // may be null
@@ -815,7 +815,6 @@ public class ParquetFileReader implements Closeable {
   public void appendTo(ParquetFileWriter writer) throws IOException {
     writer.appendRowGroups(f, blocks, true);
   }
-
   /**
    * Reads all the columns requested from the row group at the current file position.
    * @throws IOException if an error occurs while reading
@@ -1480,7 +1479,9 @@ public class ParquetFileReader implements Closeable {
     public long endPos() {
       return offset + length;
     }
-
   }
 
+  public SeekableInputStream getInputStream() {
+    return this.f;
+  }
 }

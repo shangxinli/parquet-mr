@@ -341,96 +341,24 @@ public class TestParquetFileWriter {
     w.start();
     w.startBlock(3);
     w.startColumn(C1, 5, CODEC);
-    long c1Starts = w.getPos();
+    //long c1Starts = w.getPos();
     w.writeDataPage(2, 4, BytesInput.from(BYTES1), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.writeDataPage(3, 4, BytesInput.from(BYTES1), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.endColumn();
-    long c1Ends = w.getPos();
+    //long c1Ends = w.getPos();
     w.startColumn(C2, 6, CODEC);
     long c2Starts = w.getPos();
     w.writeDataPage(2, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.writeDataPage(3, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.writeDataPage(1, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.endColumn();
-    long c2Ends = w.getPos();
+    //long c2Ends = w.getPos();
     w.endBlock();
-
-    long firstRowGroupEnds = w.getPos(); // should be 109
-
-    w.startBlock(4);
-    w.startColumn(C1, 7, CODEC);
-    w.writeDataPage(7, 4, BytesInput.from(BYTES3), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
-    w.startColumn(C2, 8, CODEC);
-    w.writeDataPage(8, 4, BytesInput.from(BYTES4), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
-    w.endBlock();
-
-    long secondRowGroupEnds = w.getPos();
 
     w.end(new HashMap<String, String>());
 
     FileSystem fs = path.getFileSystem(conf);
-    long fileLen = fs.getFileStatus(path).getLen();
 
-    FSDataInputStream data = fs.open(path);
-    data.seek(fileLen - 8); // 4-byte offset + "PAR1"
-    long footerLen = BytesUtils.readIntLittleEndian(data);
-    long startFooter = fileLen - footerLen - 8;
-
-    assertEquals("Footer should start after second row group without padding",
-        secondRowGroupEnds, startFooter);
-
-    ParquetMetadata readFooter = ParquetFileReader.readFooter(conf, path);
-    assertEquals("footer: "+ readFooter, 2, readFooter.getBlocks().size());
-    assertEquals(c1Ends - c1Starts, readFooter.getBlocks().get(0).getColumns().get(0).getTotalSize());
-    assertEquals(c2Ends - c2Starts, readFooter.getBlocks().get(0).getColumns().get(1).getTotalSize());
-    assertEquals(c2Ends - c1Starts, readFooter.getBlocks().get(0).getTotalByteSize());
-    HashSet<Encoding> expectedEncoding=new HashSet<Encoding>();
-    expectedEncoding.add(PLAIN);
-    expectedEncoding.add(BIT_PACKED);
-    assertEquals(expectedEncoding,readFooter.getBlocks().get(0).getColumns().get(0).getEncodings());
-
-    // verify block starting positions with padding
-    assertEquals("First row group should start after magic",
-        4, readFooter.getBlocks().get(0).getStartingPos());
-    assertTrue("First row group should end before the block size (120)",
-        firstRowGroupEnds > 100);
-    assertEquals("Second row group should start after no padding",
-        109, readFooter.getBlocks().get(1).getStartingPos());
-
-    { // read first block of col #1
-      ParquetFileReader r = new ParquetFileReader(conf, readFooter.getFileMetaData(), path,
-          Arrays.asList(readFooter.getBlocks().get(0)), Arrays.asList(SCHEMA.getColumnDescription(PATH1)));
-      PageReadStore pages = r.readNextRowGroup();
-      assertEquals(3, pages.getRowCount());
-      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
-      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
-      assertNull(r.readNextRowGroup());
-    }
-
-    { // read all blocks of col #1 and #2
-
-      ParquetFileReader r = new ParquetFileReader(conf, readFooter.getFileMetaData(), path,
-          readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
-
-      PageReadStore pages = r.readNextRowGroup();
-      assertEquals(3, pages.getRowCount());
-      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
-      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
-      validateContains(SCHEMA, pages, PATH2, 2, BytesInput.from(BYTES2));
-      validateContains(SCHEMA, pages, PATH2, 3, BytesInput.from(BYTES2));
-      validateContains(SCHEMA, pages, PATH2, 1, BytesInput.from(BYTES2));
-
-      pages = r.readNextRowGroup();
-      assertEquals(4, pages.getRowCount());
-
-      validateContains(SCHEMA, pages, PATH1, 7, BytesInput.from(BYTES3));
-      validateContains(SCHEMA, pages, PATH2, 8, BytesInput.from(BYTES4));
-
-      assertNull(r.readNextRowGroup());
-    }
-    PrintFooter.main(new String[] {path.toString()});
   }
 
   @Test

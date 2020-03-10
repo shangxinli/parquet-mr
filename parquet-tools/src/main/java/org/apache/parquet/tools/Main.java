@@ -38,10 +38,11 @@ import org.apache.commons.cli.PosixParser;
 
 import org.apache.parquet.tools.command.Command;
 import org.apache.parquet.tools.command.Registry;
+import java.io.File;
 
 public class Main {
   public static final Options OPTIONS;
-  public static PrintStream out;
+  public static PrintStream out = createAStream();
   public static PrintStream err;
 
   static {
@@ -66,6 +67,16 @@ public class Main {
   private static final int WIDTH = 80;
   private static final int LEFT_PAD = 4;
   private static final int DESC_PAD = 2;
+
+  private static PrintStream createAStream() {
+    try {
+      return new PrintStream(new File("/tmp/output.txt"));
+    } catch (Exception e) {
+      System.out.println(e);
+      throw new UnsupportedOperationException(e);
+    }
+  }
+
 
   public static void mergeOptionsInto(Options opt, Options opts) {
     if (opts == null) {
