@@ -45,8 +45,11 @@ import org.apache.parquet.io.api.PrimitiveConverter;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Types;
+import org.apache.parquet.tools.mask.Mask;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,18 +65,19 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
       .getBuilderForReading(Types.required(PrimitiveType.PrimitiveTypeName.BINARY).named("test_binary")).build();
 
   public static final String[] USAGE = new String[] {
-    "<input> <output> [<column> ...]",
+    "<input> <output> [<column, mask_method> ...]",
 
     "where <input> is the source parquet file",
     "    <output> is the destination parquet file," +
-      "    [<column> ...] are the columns in the case sensitive dot format" +
-      " to be masked, for example a.b.c"
+      "    [<column, mask_method> ...] are the columns in the case sensitive dot format and mask method sha256, md5 or null" +
+      " for example 'file1, file2 col_a.b.c sha256 col_c.d null' is explained as 'mask column col_a.b.c with hash" +
+      " sha256 values and mask column_c.d with null values in file1. Output file is saved as file2"
   };
 
   private static final int MAX_COL_NUM = 100;
 
   public MaskColumnsCommand() {
-    super(3, MAX_COL_NUM);
+    super(4, 2 * MAX_COL_NUM + 2);
   }
 
   @Override
@@ -90,12 +94,17 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
   public void execute(CommandLine options) throws Exception {
     super.execute(options);
 
+    // TODO: Valid arguments
     List<String> args = options.getArgList();
     Configuration conf = new Configuration();
     Path inpath = new Path(args.get(0));
     Path outpath = new Path(args.get(1));
-    List<String> cols = args.subList(2, args.size());
-    Set<ColumnPath> maskPaths = convertToColumnPaths(cols);
+    Map<ColumnPath, Mask.Method> columnMaskMap = new HashMap<>();
+    for (int i = 2; i < args.size(); i += 2) {
+      columnMaskMap.put(ColumnPath.fromDotString(args.get(i)), Mask.Method.valueOf(args.get(i + 1)));
+    }
+
+    //Set<ColumnPath> maskPaths = convertToColumnPaths(cols);
     ParquetMetadata metaData = ParquetFileReader.readFooter(conf, inpath, NO_FILTER);
     MessageType schema = metaData.getFileMetaData().getSchema();
     HadoopInputFile inputFile = HadoopInputFile.fromPath(inpath, conf);
@@ -103,13 +112,13 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
     try(ParquetFileReader reader = new ParquetFileReader(inputFile, readOptions)) {
       ParquetFileWriter writer = new ParquetFileWriter(conf, schema, outpath, ParquetFileWriter.Mode.CREATE);
       writer.start();
-      mask(writer, reader, metaData, schema, maskPaths);
+      mask(writer, reader, metaData, schema, columnMaskMap);
       writer.end(metaData.getFileMetaData().getKeyValueMetaData());
     }
   }
 
   public static void mask(final ParquetFileWriter writer, final ParquetFileReader reader, final ParquetMetadata meta,
-                          final MessageType schema, final Set<ColumnPath> maskPaths) throws IOException {
+                          final MessageType schema, final Map<ColumnPath, Mask.Method> columnMaskMap) throws IOException {
     int blockIndex = 0;
     PageReadStore store = reader.readNextRowGroup();
     while (store != null) {
@@ -126,7 +135,7 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
         ColumnPath path = chunk.getPath();
         para.setSize(para.getSize() + chunk.getTotalUncompressedSize());
 
-        if (maskPaths.contains(path)) {
+        if (columnMaskMap.containsKey(path)) {
           maskColumnChunk(writer, store, meta, schema, descriptorsMap, path, chunk);
         } else {
           appendColumnChunk(writer, reader.getInputStream(), para, columnsInOrder, i);
@@ -148,7 +157,8 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
 
   private static void maskColumnChunk(final ParquetFileWriter writer,final PageReadStore store, final ParquetMetadata meta,
                                       final MessageType schema, final Map<ColumnPath, ColumnDescriptor> descriptorsMap,
-                                      final ColumnPath path,  final ColumnChunkMetaData chunk) throws IOException  {
+                                      final ColumnPath path,  final ColumnChunkMetaData chunk,
+                                      final Map<ColumnPath, Mask.Method> columnMaskMap) throws IOException  {
     ColumnReadStoreImpl crstore = new ColumnReadStoreImpl(store, new DumpGroupConverter(),
       schema, meta.getFileMetaData().getCreatedBy());
     ColumnDescriptor columnDescriptor = descriptorsMap.get(path);
@@ -158,15 +168,20 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
 
     writer.startColumn(columnDescriptor, totalValues, chunk.getCodec());
 
-    for (long j = 0; j < totalValues; ++j) {
-      maskAndWriteField(writer, creader, dmax, columnDescriptor);
-      creader.consume();
+    if (columnMaskMap.get(path).equals(Mask.Method.NULL)) {
+      //TODO:
+      //writer.writeDataPage(1, totalValues, null, EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    } else {
+      for (long j = 0; j < totalValues; ++j) {
+        maskField(writer, creader, dmax, columnDescriptor);
+        creader.consume();
+      }
     }
 
     writer.endColumn();
   }
 
-  private static void maskAndWriteField(final ParquetFileWriter writer, final ColumnReader creader, final int dmax,
+  private static void maskField(final ParquetFileWriter writer, final ColumnReader creader, final int dmax,
                                  final ColumnDescriptor columnDescriptor) throws IOException {
     int rlvl = creader.getCurrentRepetitionLevel();
     int dlvl = creader.getCurrentDefinitionLevel();
@@ -200,7 +215,6 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
           break;
       }
     } else {
-      //out.format("<null>");
     }
   }
 
