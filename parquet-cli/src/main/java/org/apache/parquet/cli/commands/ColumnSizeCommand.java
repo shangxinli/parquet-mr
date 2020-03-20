@@ -52,21 +52,27 @@ public class ColumnSizeCommand extends BaseCommand {
   }
 
   @Parameter(description = "<parquet path>")
-  List<String> targets;
+  String target;
+
+  @Parameter(
+    names = {"-c", "--column", "--columns"},
+    description = "List of columns",
+    required = false)
+  List<String> columns;
 
   @Override
   @SuppressWarnings("unchecked")
   public int run() throws IOException {
-    Preconditions.checkArgument(targets != null && targets.size() >= 1,
+    Preconditions.checkArgument(target != null,
       "A Parquet file is required.");
 
-    Path inputFile = new Path(targets.get(0));
-
+    Path inputFile = new Path(target);
     Map<String, Long> columnSizes = getColumnSizeInBytes(inputFile);
     Map<String, Float> columnPercentage = getColumnPercentage(columnSizes);
 
-    if (targets.size() > 1) {
-      for (String inputColumn : targets.subList(1, targets.size())) {
+    // If user inputted columns, only print out size for those columns
+    if (columns != null && columns.size() > 0) {
+      for (String inputColumn : columns) {
         long size = 0;
         float percentage = 0;
         for (String column : columnSizes.keySet()) {

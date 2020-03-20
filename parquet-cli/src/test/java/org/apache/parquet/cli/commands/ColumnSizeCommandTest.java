@@ -52,7 +52,7 @@ public class ColumnSizeCommandTest extends ParquetFileTest {
   public void testColumnSizeCommand() throws IOException {
     File file = parquetFile();
     ColumnSizeCommand command = new ColumnSizeCommand(createLogger());
-    command.targets = Arrays.asList(file.getAbsolutePath());
+    command.target = file.getAbsolutePath();
     command.setConf(new Configuration());
     Assert.assertEquals(0, command.run());
   }
