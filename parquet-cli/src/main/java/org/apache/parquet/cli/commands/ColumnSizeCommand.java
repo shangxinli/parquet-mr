@@ -59,17 +59,29 @@ public class ColumnSizeCommand extends BaseCommand {
   public int run() throws IOException {
     Preconditions.checkArgument(targets != null && targets.size() >= 1,
       "A Parquet file is required.");
-    Preconditions.checkArgument(targets.size() == 1,
-      "Cannot process multiple Parquet files.");
 
     Path inputFile = new Path(targets.get(0));
 
     Map<String, Long> columnSizes = getColumnSizeInBytes(inputFile);
     Map<String, Float> columnPercentage = getColumnPercentage(columnSizes);
 
-    for (String column : columnSizes.keySet()) {
-      console.info(column + "->" + " Size In Bytes: " + columnSizes.get(column)
-        + " Size In Percentage: " + columnPercentage.get(column));
+    if (targets.size() > 1) {
+      for (String inputColumn : targets.subList(1, targets.size())) {
+        long size = 0;
+        float percentage = 0;
+        for (String column : columnSizes.keySet()) {
+          if (column.startsWith(inputColumn)) {
+            size += columnSizes.get(column);
+            percentage += columnPercentage.get(column);
+          }
+        }
+        console.info(inputColumn + "->" + " Size In Bytes: " + size + " Size In Percentage: " + percentage);
+      }
+    } else {
+      for (String column : columnSizes.keySet()) {
+        console.info(column + "->" + " Size In Bytes: " + columnSizes.get(column)
+          + " Size In Percentage: " + columnPercentage.get(column));
+      }
     }
 
     return 0;
@@ -79,7 +91,9 @@ public class ColumnSizeCommand extends BaseCommand {
   public List<String> getExamples() {
     return Lists.newArrayList(
         "# Print every column size in byte and percentage for a Parquet file",
-        "sample.parquet"
+        "sample.parquet",
+        "sample.parquet col_1 col_2",
+        "sample.parquet col_1 col_2.sub_col_a"
     );
   }
 

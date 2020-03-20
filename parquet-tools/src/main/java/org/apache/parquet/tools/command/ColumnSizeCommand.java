@@ -37,11 +37,19 @@ public class ColumnSizeCommand extends ArgsOnlyCommand {
 
   public static final String[] USAGE = new String[] {
     "<input>",
-    "where <input> is the parquet file to get every column size in bytes and percentage to stdout"
+    "where <input> is the parquet file to calculate teh column size" +
+    "     [<column> ...] are the columns in the case sensitive dot format" +
+    "     to be calculated, for example a.b.c. If no columns are input, all the" +
+    "     columns will be printed out"
   };
 
+  /**
+   * Biggest number of columns we can calculate.
+   */
+  private static final int MAX_COL_NUM = 100;
+
   public ColumnSizeCommand() {
-    super(1, 1);
+    super(1, 1 + MAX_COL_NUM);
   }
 
   @Override
@@ -51,7 +59,7 @@ public class ColumnSizeCommand extends ArgsOnlyCommand {
 
   @Override
   public String getCommandDescription() {
-    return "Print out the size in bytes and percentage of all columns in the input Parquet file";
+    return "Print out the size in bytes and percentage of column(s) in the input Parquet file";
   }
 
   @Override
@@ -63,9 +71,23 @@ public class ColumnSizeCommand extends ArgsOnlyCommand {
     Map<String, Long> columnSizes = getColumnSizeInBytes(inputFile);
     Map<String, Float> columnPercentage = getColumnPercentage(columnSizes);
 
-    for (String column : columnSizes.keySet()) {
-      Main.out.println(column + "->" + " Size In Bytes: " + columnSizes.get(column)
-        + " Size In Percentage: " + columnPercentage.get(column));
+    if (args.size() > 1) {
+      for (String inputColumn : args.subList(1, args.size())) {
+        long size = 0;
+        float percentage = 0;
+        for (String column : columnSizes.keySet()) {
+          if (column.startsWith(inputColumn)) {
+            size += columnSizes.get(column);
+            percentage += columnPercentage.get(column);
+          }
+        }
+        Main.out.println(inputColumn + "->" + " Size In Bytes: " + size + " Size In Percentage: " + percentage);
+      }
+    } else {
+      for (String column : columnSizes.keySet()) {
+        Main.out.println(column + "->" + " Size In Bytes: " + columnSizes.get(column)
+          + " Size In Percentage: " + columnPercentage.get(column));
+      }
     }
   }
 
