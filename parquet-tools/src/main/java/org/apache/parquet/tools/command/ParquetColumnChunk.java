@@ -37,6 +37,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * TODO: Get ride of this class by looking at the ParquetFileReader.java
+ */
 public class ParquetColumnChunk
   extends ByteArrayInputStream
 {
@@ -72,14 +75,14 @@ public class ParquetColumnChunk
           if (dictionaryPage != null) {
             throw new IOException(  "has more than one dictionary page in column chunk");
           }
-          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(uncompressedPageSize).getBytes()));
+          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(compressedPageSize).getBytes()));
           break;
         case DATA_PAGE:
-          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(uncompressedPageSize).getBytes()));
+          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(compressedPageSize).getBytes()));
           valueCount += pageHeader.getData_page_header().getNum_values();
           break;
         case DATA_PAGE_V2:
-          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(uncompressedPageSize).getBytes()));
+          pagesWithHeader.add(new PageWithHeader(pageHeader, getSlice(compressedPageSize).getBytes()));
           valueCount += pageHeader.getData_page_header_v2().getNum_values();
           break;
         default:

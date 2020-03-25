@@ -53,6 +53,7 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Types;
 import org.apache.parquet.tools.mask.Mask;
 
+import java.io.DataInput;
 import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -67,7 +68,6 @@ import static org.apache.parquet.column.Encoding.BIT_PACKED;
 import static org.apache.parquet.column.Encoding.PLAIN;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.format.Util.writePageHeader;
-
 
 public class TransCompressionCommand extends ArgsOnlyCommand {
   private static final Statistics<?> EMPTY_STATS = Statistics
@@ -144,12 +144,15 @@ public class TransCompressionCommand extends ArgsOnlyCommand {
 
         ColumnReadStoreImpl crstore = new ColumnReadStoreImpl(store, new DumpGroupConverter(), schema, meta.getFileMetaData().getCreatedBy());
         ColumnDescriptor columnDescriptor = descriptorsMap.get(chunk.getPath());
+        //TODO: creader already trigger decompress
         ColumnReader creader = crstore.getColumnReader(columnDescriptor);
         long totalValues = creader.getTotalValueCount();
         List<PageWithHeader> pagesWithHeader = getPagesWithHeader(chunk);
-        List<PageWithHeader> transPagesWithHeader = transCompression(pagesWithHeader, chunk.getCodec());
+        //TODO: We hardcoded it
+        CompressionCodecName compressionCodecName = CompressionCodecName.SNAPPY;
+        List<PageWithHeader> transPagesWithHeader = transCompression(pagesWithHeader, chunk.getCodec(), compressionCodecName);
 
-        writer.startColumn(columnDescriptor, totalValues, chunk.getCodec());
+        writer.startColumn(columnDescriptor, totalValues, compressionCodecName);
         writeColumn(transPagesWithHeader);
         writer.endColumn();
       }
@@ -172,15 +175,21 @@ public class TransCompressionCommand extends ArgsOnlyCommand {
     return parquetColumnChunk.readAllPagesInOrder(chunk.getValueCount());
   }
 
-  private List<PageWithHeader> transCompression(List<PageWithHeader> pagesWithHeader, CompressionCodecName codecName) throws IOException {
+  private List<PageWithHeader> transCompression(List<PageWithHeader> pagesWithHeader, CompressionCodecName deCodecName, CompressionCodecName enCodecName) throws IOException {
     List<PageWithHeader> transPagesWithHeader = new ArrayList<>();
-    CompressionCodecFactory.BytesInputDecompressor decompressor = codecFactory.getDecompressor(codecName);
-    CompressionCodecFactory.BytesInputCompressor compressor = codecFactory.getCompressor(codecName);
-    for (PageWithHeader pageWithHeader : pagesWithHeader) {
-      byte[] originCompressedData = pageWithHeader.getPageLoad();
-      BytesInput rawData = decompressor.decompress(BytesInput.from(originCompressedData), pageWithHeader.getHeader().getUncompressed_page_size());
-      BytesInput newCompressedData = compressor.compress(rawData);
-      transPagesWithHeader.add(new PageWithHeader(pageWithHeader.getHeader(), newCompressedData.toByteArray()));
+    CompressionCodecFactory.BytesInputDecompressor decompressor = codecFactory.getDecompressor(deCodecName);
+    CompressionCodecFactory.BytesInputCompressor compressor = codecFactory.getCompressor(enCodecName);
+    for (PageWithHeader page : pagesWithHeader) {
+      byte[] data = page.getPageLoad();
+      if (page.isCompressed()) {
+        BytesInput input = BytesInput.from(data);
+        int uncompressedSize = page.getHeader().getUncompressed_page_size();
+        BytesInput rawData = decompressor.decompress(input, uncompressedSize);
+        data = rawData.toByteArray();
+      }
+      BytesInput bytesInput = BytesInput.from(data);
+      BytesInput newCompressedData = compressor.compress(bytesInput);
+      transPagesWithHeader.add(new PageWithHeader(page.getHeader(), newCompressedData.toByteArray()));
     }
     return transPagesWithHeader;
   }
@@ -190,6 +199,7 @@ public class TransCompressionCommand extends ArgsOnlyCommand {
       int valueCount = 0;
       long rowCount = 0;
       Statistics statistics = EMPTY_STATS;
+      //TODO: replace with converter.getEncoding
       Encoding encoding = null;
       switch (page.getHeader().type) {
         case DICTIONARY_PAGE:

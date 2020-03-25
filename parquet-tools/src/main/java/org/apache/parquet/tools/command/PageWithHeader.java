@@ -18,6 +18,7 @@
  */
 package org.apache.parquet.tools.command;
 
+import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.DataPage;
 import org.apache.parquet.column.page.DataPageV1;
@@ -39,11 +40,13 @@ import io.airlift.slice.Slice;
 public class PageWithHeader
 {
   private PageHeader header;
+  private boolean compressed;
   private byte[] pageLoad;
 
   public PageWithHeader(PageHeader header, byte[] pageLoad) {
     this.header = header;
     this.pageLoad = pageLoad;
+    this.compressed = setCompressed(header);
   }
 
   public PageHeader getHeader() {
@@ -52,5 +55,14 @@ public class PageWithHeader
 
   public byte[] getPageLoad() {
     return pageLoad;
+  }
+
+  public boolean isCompressed() {
+    return compressed;
+  }
+
+  private boolean setCompressed(PageHeader header) {
+    //TODO: This is a hack
+    return header.uncompressed_page_size != header.compressed_page_size;
   }
 }
