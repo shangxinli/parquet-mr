@@ -32,10 +32,10 @@ import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
 import org.apache.parquet.hadoop.example.GroupReadSupport;
 import org.apache.parquet.hadoop.example.GroupWriteSupport;
+import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.junit.Test;
-import org.apache.parquet.schema.Type.Repetition;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -46,10 +46,10 @@ import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 import static org.apache.parquet.schema.Type.Repetition.REQUIRED;
 import static org.junit.Assert.assertEquals;
 
-public class TestMaskColumnsCommand {
+public class TestTransCompressionCommand {
 
-  private final int numRecord = 1;
-  private MaskColumnsCommand command = new MaskColumnsCommand();
+  private final int numRecord = 5;
+  private TransCompressionCommand command = new TransCompressionCommand();
   private DumpCommand dumpCommand = new DumpCommand();
   private Configuration conf = new Configuration();
 
@@ -63,10 +63,10 @@ public class TestMaskColumnsCommand {
      String cargs[] = {inputFile, outputFile, "DocId", "SHA256"};
     executeCommandLine(cargs);
 
-    /*String dumpCargs[] = {inputFile};
+    String dumpCargs[] = {inputFile};
     CommandLineParser parser = new PosixParser();
     CommandLine cmdLine = parser.parse(new Options(), dumpCargs, dumpCommand.supportsExtraArgs());
-    dumpCommand.execute(cmdLine); */
+    dumpCommand.execute(cmdLine);
   }
 
   private void executeCommandLine(String[] cargs) throws Exception {
@@ -118,12 +118,12 @@ public class TestMaskColumnsCommand {
     conf.set(GroupWriteSupport.PARQUET_EXAMPLE_SCHEMA, schema.toString());
 
     String file = createTempFile(prefix);
-    ExampleParquetWriter.Builder builder = ExampleParquetWriter.builder(new Path(file)).withConf(conf);
+    ExampleParquetWriter.Builder builder = ExampleParquetWriter.builder(new Path(file)).withConf(conf).withCompressionCodec(CompressionCodecName.GZIP);
     try (ParquetWriter writer = builder.build()) {
       for (int i = 0; i < numRecord; i++) {
         SimpleGroup g = new SimpleGroup(schema);
-        //g.add("DocId", 1l);
-        //g.add("Name", "foo");
+        g.add("DocId", 1l);
+        g.add("Name", "foo");
         /*        g.add("Gender", "male");
         Group links = g.addGroup("Links");
         links.add(0, 2l);

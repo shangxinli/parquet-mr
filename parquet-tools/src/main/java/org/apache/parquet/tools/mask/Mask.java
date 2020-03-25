@@ -22,8 +22,8 @@ public abstract class Mask {
 
   public enum Method {
     NULL("null", Rule.FLAT, "Replace the field with null value"),
-    SHA256("sha256", Rule.IDENTITY, "Replace the fied with hash value with hash method SHA256"),
-    MD5("md5", Rule.IDENTITY, "Replace the fied with hash value with hash method MD5");
+    SHA256("sha256", Rule.IDENTITY, "Replace the field with hash value with hash method SHA256"),
+    MD5("md5", Rule.IDENTITY, "Replace the field with hash value with hash method MD5");
 
     private final String name;
     private final Rule rule;

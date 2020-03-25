@@ -27,15 +27,21 @@ import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.ColumnReader;
+import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.impl.ColumnReadStoreImpl;
+import org.apache.parquet.column.page.DictionaryPage;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.column.statistics.Statistics;
+import org.apache.parquet.compression.CompressionCodecFactory;
+import org.apache.parquet.format.PageHeader;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetFileWriter;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.util.HadoopCodecs;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.io.api.Binary;
@@ -48,6 +54,7 @@ import org.apache.parquet.schema.Types;
 import org.apache.parquet.tools.mask.Mask;
 
 import java.io.IOException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,8 +66,10 @@ import java.util.stream.Collectors;
 import static org.apache.parquet.column.Encoding.BIT_PACKED;
 import static org.apache.parquet.column.Encoding.PLAIN;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
+import static org.apache.parquet.format.Util.writePageHeader;
 
-public class MaskColumnsCommand extends ArgsOnlyCommand {
+
+public class TransCompressionCommand extends ArgsOnlyCommand {
   private static final Statistics<?> EMPTY_STATS = Statistics
       .getBuilderForReading(Types.required(PrimitiveType.PrimitiveTypeName.BINARY).named("test_binary")).build();
 
@@ -76,7 +85,12 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
 
   private static final int MAX_COL_NUM = 100;
 
-  public MaskColumnsCommand() {
+  private ParquetFileWriter writer = null;
+  private ParquetFileReader reader = null;
+  protected CompressionCodecFactory codecFactory = HadoopCodecs.newFactory(0);
+
+
+  public TransCompressionCommand() {
     super(4, 2 * MAX_COL_NUM + 2);
   }
 
@@ -99,26 +113,20 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
     Configuration conf = new Configuration();
     Path inpath = new Path(args.get(0));
     Path outpath = new Path(args.get(1));
-    Map<ColumnPath, Mask.Method> columnMaskMap = new HashMap<>();
-    for (int i = 2; i < args.size(); i += 2) {
-      columnMaskMap.put(ColumnPath.fromDotString(args.get(i)), Mask.Method.valueOf(args.get(i + 1)));
-    }
 
-    //Set<ColumnPath> maskPaths = convertToColumnPaths(cols);
     ParquetMetadata metaData = ParquetFileReader.readFooter(conf, inpath, NO_FILTER);
     MessageType schema = metaData.getFileMetaData().getSchema();
     HadoopInputFile inputFile = HadoopInputFile.fromPath(inpath, conf);
     ParquetReadOptions readOptions = HadoopReadOptions.builder(conf).build();
-    try(ParquetFileReader reader = new ParquetFileReader(inputFile, readOptions)) {
-      ParquetFileWriter writer = new ParquetFileWriter(conf, schema, outpath, ParquetFileWriter.Mode.CREATE);
-      writer.start();
-      mask(writer, reader, metaData, schema, columnMaskMap);
-      writer.end(metaData.getFileMetaData().getKeyValueMetaData());
-    }
+    reader = new ParquetFileReader(inputFile, readOptions);
+    writer = new ParquetFileWriter(conf, schema, outpath, ParquetFileWriter.Mode.CREATE);
+    writer.start();
+    processBlocks(metaData, schema);
+    writer.end(metaData.getFileMetaData().getKeyValueMetaData());
+    reader.close();
   }
 
-  public static void mask(final ParquetFileWriter writer, final ParquetFileReader reader, final ParquetMetadata meta,
-                          final MessageType schema, final Map<ColumnPath, Mask.Method> columnMaskMap) throws IOException {
+  public void processBlocks(final ParquetMetadata meta, final MessageType schema) throws IOException {
     int blockIndex = 0;
     PageReadStore store = reader.readNextRowGroup();
     while (store != null) {
@@ -132,14 +140,18 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
       ParquetFileWriter.StreamPara para = new ParquetFileWriter.StreamPara(-1, 0, 0);
       for (int i = 0; i < columnsInOrder.size(); i += 1) {
         ColumnChunkMetaData chunk = columnsInOrder.get(i);
-        ColumnPath path = chunk.getPath();
         para.setSize(para.getSize() + chunk.getTotalUncompressedSize());
 
-        if (columnMaskMap.containsKey(path)) {
-          maskColumnChunk(writer, store, meta, schema, descriptorsMap, path, chunk, columnMaskMap);
-        } else {
-          appendColumnChunk(writer, reader.getInputStream(), para, columnsInOrder, i);
-        }
+        ColumnReadStoreImpl crstore = new ColumnReadStoreImpl(store, new DumpGroupConverter(), schema, meta.getFileMetaData().getCreatedBy());
+        ColumnDescriptor columnDescriptor = descriptorsMap.get(chunk.getPath());
+        ColumnReader creader = crstore.getColumnReader(columnDescriptor);
+        long totalValues = creader.getTotalValueCount();
+        List<PageWithHeader> pagesWithHeader = getPagesWithHeader(chunk);
+        List<PageWithHeader> transPagesWithHeader = transCompression(pagesWithHeader, chunk.getCodec());
+
+        writer.startColumn(columnDescriptor, totalValues, chunk.getCodec());
+        writeColumn(transPagesWithHeader);
+        writer.endColumn();
       }
 
       writer.setCurrentBlockSize(para.getSize());
@@ -150,82 +162,64 @@ public class MaskColumnsCommand extends ArgsOnlyCommand {
     }
   }
 
-  private static void appendColumnChunk(final ParquetFileWriter writer, final SeekableInputStream from, final ParquetFileWriter.StreamPara para,
-                                        final List<ColumnChunkMetaData> columnsInOrder, final int columnIndex) throws IOException {
-    writer.appendColumnChunk(from, para, columnsInOrder, columnIndex);
+  private List<PageWithHeader> getPagesWithHeader(ColumnChunkMetaData chunk)  throws IOException {
+    SeekableInputStream f = reader.getInputStream();
+    // TODO Cast loss
+    byte[] columnBuffer = new byte[(int) chunk.getTotalSize()];
+    f.seek(chunk.getStartingPos());
+    f.readFully(columnBuffer);
+    ParquetColumnChunk parquetColumnChunk = new ParquetColumnChunk(columnBuffer, 0);
+    return parquetColumnChunk.readAllPagesInOrder(chunk.getValueCount());
   }
 
-  private static void maskColumnChunk(final ParquetFileWriter writer,final PageReadStore store, final ParquetMetadata meta,
-                                      final MessageType schema, final Map<ColumnPath, ColumnDescriptor> descriptorsMap,
-                                      final ColumnPath path,  final ColumnChunkMetaData chunk,
-                                      final Map<ColumnPath, Mask.Method> columnMaskMap) throws IOException  {
-    ColumnReadStoreImpl crstore = new ColumnReadStoreImpl(store, new DumpGroupConverter(),
-      schema, meta.getFileMetaData().getCreatedBy());
-    ColumnDescriptor columnDescriptor = descriptorsMap.get(path);
-    int dmax = columnDescriptor.getMaxDefinitionLevel();
-    ColumnReader creader = crstore.getColumnReader(columnDescriptor);
-    long totalValues = creader.getTotalValueCount();
+  private List<PageWithHeader> transCompression(List<PageWithHeader> pagesWithHeader, CompressionCodecName codecName) throws IOException {
+    List<PageWithHeader> transPagesWithHeader = new ArrayList<>();
+    CompressionCodecFactory.BytesInputDecompressor decompressor = codecFactory.getDecompressor(codecName);
+    CompressionCodecFactory.BytesInputCompressor compressor = codecFactory.getCompressor(codecName);
+    for (PageWithHeader pageWithHeader : pagesWithHeader) {
+      byte[] originCompressedData = pageWithHeader.getPageLoad();
+      BytesInput rawData = decompressor.decompress(BytesInput.from(originCompressedData), pageWithHeader.getHeader().getUncompressed_page_size());
+      BytesInput newCompressedData = compressor.compress(rawData);
+      transPagesWithHeader.add(new PageWithHeader(pageWithHeader.getHeader(), newCompressedData.toByteArray()));
+    }
+    return transPagesWithHeader;
+  }
 
-    writer.startColumn(columnDescriptor, totalValues, chunk.getCodec());
-
-    if (columnMaskMap.get(path).equals(Mask.Method.NULL)) {
-      //TODO:
-      writer.writeDataPage((int)totalValues, (int)totalValues, null, EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-    } else {
-      for (long j = 0; j < totalValues; ++j) {
-        maskField(writer, creader, dmax, columnDescriptor);
-        creader.consume();
+  private void writeColumn(List<PageWithHeader> pagesWithHeader) throws IOException {
+    for (PageWithHeader page : pagesWithHeader) {
+      int valueCount = 0;
+      long rowCount = 0;
+      Statistics statistics = EMPTY_STATS;
+      Encoding encoding = null;
+      switch (page.getHeader().type) {
+        case DICTIONARY_PAGE:
+          String codeName = page.getHeader().dictionary_page_header.getEncoding().name();
+          encoding =  org.apache.parquet.column.Encoding.valueOf(codeName);
+          writer.writeDictionaryPage(new DictionaryPage(BytesInput.from(page.getPageLoad()), page.getHeader().getCompressed_page_size(), encoding));
+          break;
+        case DATA_PAGE:
+          codeName = page.getHeader().data_page_header.getEncoding().name();
+          encoding =  org.apache.parquet.column.Encoding.valueOf(codeName);
+          valueCount = page.getHeader().getData_page_header().getNum_values();
+          //statistics = page.getHeader().getData_page_header().getStatistics();
+          //TODO: WRONG WRONG
+          rowCount = valueCount;
+          writer.writeDataPage(valueCount, page.getHeader().uncompressed_page_size, BytesInput.from(page.getPageLoad()),
+            statistics, rowCount, encoding, encoding, encoding);
+          break;
+        case DATA_PAGE_V2:
+          codeName = page.getHeader().data_page_header_v2.getEncoding().name();
+          encoding =  org.apache.parquet.column.Encoding.valueOf(codeName);
+          valueCount = page.getHeader().getData_page_header_v2().getNum_values();
+          //TODO:
+          rowCount = valueCount;
+          writer.writeDataPage(valueCount, page.getHeader().uncompressed_page_size, BytesInput.from(page.getPageLoad()),
+            statistics, rowCount, encoding, encoding, encoding);
+          break;
+        default:
+          throw new RuntimeException("blalla");
       }
     }
-
-    writer.endColumn();
-  }
-
-  private static void maskField(final ParquetFileWriter writer, final ColumnReader creader, final int dmax,
-                                 final ColumnDescriptor columnDescriptor) throws IOException {
-    int rlvl = creader.getCurrentRepetitionLevel();
-    int dlvl = creader.getCurrentDefinitionLevel();
-    int len = 0;
-
-    if (dlvl == dmax) {
-      switch (columnDescriptor.getType()) {
-        case FIXED_LEN_BYTE_ARRAY:
-        case INT96:
-        case BINARY:
-          //out.print(stringifier.stringify(creader.getBinary()));
-          Binary data = creader.getBinary();
-          writer.writeDataPage(1, data.length(), BytesInput.from(data.getBytes()), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-          break;
-        case BOOLEAN:
-          //out.print(stringifier.stringify(creader.getBoolean()));
-          break;
-        case DOUBLE:
-          //out.print(stringifier.stringify(creader.getDouble()));
-          break;
-        case FLOAT:
-          //out.print(stringifier.stringify(creader.getFloat()));
-          break;
-        case INT32:
-          //out.print(stringifier.stringify(creader.getInteger()));
-          break;
-        case INT64:
-          //out.print(stringifier.stringify(creader.getLong()));
-          Long longData = creader.getLong();
-          writer.writeDataPage(1, 8, BytesInput.from(BytesUtils.longToBytes(longData)), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-          break;
-      }
-    } else {
-      //TODO: When
-      System.out.println("sdaf");
-    }
-  }
-
-  private Set<ColumnPath> convertToColumnPaths(List<String> cols) {
-    Set<ColumnPath> prunePaths = new HashSet<>();
-    for (String col : cols) {
-      prunePaths.add(ColumnPath.fromDotString(col));
-    }
-    return prunePaths;
   }
 
   private static final class DumpGroupConverter extends GroupConverter {
