@@ -50,6 +50,11 @@ public abstract class ParquetFileTest extends FileTest {
 
   protected File parquetFile() {
     File tmpDir = getTempFolder();
+    return new File(tmpDir, getClass().getSimpleName() + ".parquet");
+  }
+
+  protected File randomParquetFile() {
+    File tmpDir = getTempFolder();
     return new File(tmpDir, getClass().getSimpleName() + rnd.nextLong() + ".parquet");
   }
 

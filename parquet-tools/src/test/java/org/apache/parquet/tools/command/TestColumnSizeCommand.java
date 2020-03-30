@@ -69,7 +69,7 @@ public class TestColumnSizeCommand {
 
     conf.set(GroupWriteSupport.PARQUET_EXAMPLE_SCHEMA, schema.toString());
 
-    String file = parquetFile().getAbsolutePath();
+    String file = randomParquetFile().getAbsolutePath();
     ExampleParquetWriter.Builder builder = ExampleParquetWriter.builder(new Path(file)).withConf(conf);
     Random rnd = new Random();
     try (ParquetWriter writer = builder.build()) {
@@ -88,7 +88,7 @@ public class TestColumnSizeCommand {
     return this.tempFolder.getRoot();
   }
 
-  private File parquetFile() {
+  private File randomParquetFile() {
     File tmpDir = getTempFolder();
     return new File(tmpDir, getClass().getSimpleName() + rnd.nextLong() + ".parquet");
   }
