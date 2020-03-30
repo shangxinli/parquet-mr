@@ -47,13 +47,14 @@ public class TestColumnSizeCommand {
   private final int numRecord = 10000;
   private ColumnSizeCommand command = new ColumnSizeCommand();
   private Configuration conf = new Configuration();
+  private Random rnd = new Random();
 
   @Rule
   public TemporaryFolder tempFolder = new TemporaryFolder();
 
   @Test
   public void testColumnSize() throws Exception {
-    String inputFile = createParquetFile("input");
+    String inputFile = createParquetFile();
     Map<String, Long> columnSizeInBytes = command.getColumnSizeInBytes(new Path(inputFile));
     assertEquals(columnSizeInBytes.size(), 2);
     assertTrue(columnSizeInBytes.get("DocId") > columnSizeInBytes.get("Num"));
@@ -61,7 +62,7 @@ public class TestColumnSizeCommand {
     assertTrue(columnRatio.get("DocId") > columnRatio.get("Num"));
   }
 
-  private String createParquetFile(String prefix) throws IOException {
+  private String createParquetFile() throws IOException {
     MessageType schema = new MessageType("schema",
       new PrimitiveType(REQUIRED, INT64, "DocId"),
       new PrimitiveType(REQUIRED, INT32, "Num"));
@@ -89,6 +90,6 @@ public class TestColumnSizeCommand {
 
   private File parquetFile() {
     File tmpDir = getTempFolder();
-    return new File(tmpDir, getClass().getSimpleName() + ".parquet");
+    return new File(tmpDir, getClass().getSimpleName() + rnd.nextLong() + ".parquet");
   }
 }
