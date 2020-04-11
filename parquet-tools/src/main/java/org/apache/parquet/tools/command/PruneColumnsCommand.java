@@ -19,7 +19,9 @@
 package org.apache.parquet.tools.command;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.io.FileExistsException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -34,6 +36,7 @@ import org.apache.parquet.schema.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -95,13 +98,49 @@ public class PruneColumnsCommand extends ArgsOnlyCommand {
         LOG.warn("Input column name {} doesn't show up in the schema of file {}", col, inputFile.getName());
       }
     }
-
-    ParquetFileWriter writer = new ParquetFileWriter(conf,
-      pruneColumnsInSchema(schema, prunePaths), outputFile, ParquetFileWriter.Mode.CREATE);
+    
+    MessageType prunedSchema = pruneColumnsInSchema(schema, prunePaths);
+    ParquetFileWriter writer;
+    try {
+      writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.CREATE);
+    } catch (FileExistsException | FileAlreadyExistsException e) {
+      if (doubleValid(outputFile)) {
+        LOG.info("{} exist and complete. No need to change");
+        return;
+      }
+      LOG.warn("Overwriting {} because it was incomplete file", outputFile.getName());
+      writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.OVERWRITE);
+    }
 
     writer.start();
     writer.appendFile(HadoopInputFile.fromPath(inputFile, conf));
     writer.end(metaData.getKeyValueMetaData());
+  }
+
+  private boolean doubleValid(Path file) throws Exception {
+    if (validParquetFile(file)) {
+      return true;
+    }
+
+    Thread.sleep(1000 * 60);
+
+    if (validParquetFile(file)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private boolean validParquetFile(Path file) throws IOException {
+    try {
+      ParquetFileReader.readFooter(conf, file, ParquetMetadataConverter.NO_FILTER);
+    } catch (Exception e) {
+      if (e.getMessage().contains("is not a Parquet file")) {
+        return false;
+      }
+      throw e;
+    }
+    return true;
   }
 
   // We have to rewrite getPaths because MessageType only get level 0 paths
