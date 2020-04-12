@@ -23,6 +23,7 @@ import org.apache.commons.io.FileExistsException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetFileWriter;
@@ -35,6 +36,7 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.ipc.RemoteException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -105,10 +107,15 @@ public class PruneColumnsCommand extends ArgsOnlyCommand {
       writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.CREATE);
     } catch (FileExistsException | FileAlreadyExistsException e) {
       if (doubleValid(outputFile)) {
-        LOG.info("{} exist and complete. No need to change");
+        LOG.info("{} exist and complete. No need to change", outputFile.getName());
         return;
       }
       LOG.warn("Overwriting {} because it was incomplete file", outputFile.getName());
+      writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.OVERWRITE);
+    } catch (AlreadyBeingCreatedException | RemoteException e) {
+      LOG.warn("Remote error or {} being created. Wait for 1 minute", outputFile.getName());
+      Thread.sleep(1000 * 60);
+      LOG.warn("Overwrite existing file {} if exists", outputFile.getName());
       writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.OVERWRITE);
     }
 
