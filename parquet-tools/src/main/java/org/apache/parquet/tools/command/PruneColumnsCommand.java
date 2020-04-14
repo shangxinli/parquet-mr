@@ -105,6 +105,7 @@ public class PruneColumnsCommand extends ArgsOnlyCommand {
     ParquetFileWriter writer;
     try {
       writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.CREATE);
+      LOG.info("Writer for {} is created", outputFile.getName());
     } catch (FileExistsException | FileAlreadyExistsException e) {
       if (doubleValid(outputFile)) {
         LOG.info("{} exist and complete. No need to change", outputFile.getName());
@@ -113,15 +114,26 @@ public class PruneColumnsCommand extends ArgsOnlyCommand {
       LOG.warn("Overwriting {} because it was incomplete file", outputFile.getName());
       writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.OVERWRITE);
     } catch (AlreadyBeingCreatedException | RemoteException e) {
-      LOG.warn("Remote error or {} being created. Wait for 1 minute", outputFile.getName());
-      Thread.sleep(1000 * 60);
+      LOG.warn("Remote error or {} being created. Wait...", outputFile.getName());
+      int index = 0;
+      while(index < 10) {
+        Thread.sleep(1000 * 60);
+        if (outputFile.getFileSystem(conf).exists(outputFile) && validParquetFile(outputFile)) {
+          LOG.warn("After waiting {} times, {} is completed. Hence no need to overwrite", index, outputFile.getName());
+          return;
+        }
+        index++;
+      }
       LOG.warn("Overwrite existing file {} if exists", outputFile.getName());
       writer = new ParquetFileWriter(conf, prunedSchema, outputFile, ParquetFileWriter.Mode.OVERWRITE);
     }
 
     writer.start();
+    LOG.info("{} is started being written", outputFile.getName());
     writer.appendFile(HadoopInputFile.fromPath(inputFile, conf));
+    LOG.info("{} is appened all columns", outputFile.getName());
     writer.end(metaData.getKeyValueMetaData());
+    LOG.info("{} is created completely", outputFile.getName());
   }
 
   private boolean doubleValid(Path file) throws Exception {
