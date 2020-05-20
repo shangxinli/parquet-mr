@@ -24,7 +24,6 @@ import org.xerial.snappy.Snappy;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import com.github.luben.zstd.Zstd;
 
 public class ZstandardDecompressor implements Decompressor {
   // Buffer for uncompressed output. This buffer grows as necessary.
@@ -34,9 +33,8 @@ public class ZstandardDecompressor implements Decompressor {
   private ByteBuffer inputBuffer = ByteBuffer.allocate(0);
 
   private boolean finished;
-  private Zstd decompressor = new Zstd();
 
-  //private io.airlift.compress.zstd.ZstdDecompressor decompressor = new io.airlift.compress.zstd.ZstdDecompressor();
+  private io.airlift.compress.zstd.ZstdDecompressor decompressor = new io.airlift.compress.zstd.ZstdDecompressor();
 
   /**
    * Fills specified buffer with uncompressed data. Returns actual number
@@ -71,8 +69,8 @@ public class ZstandardDecompressor implements Decompressor {
 
       // Reset the previous outputBuffer (i.e. set position to 0)
       outputBuffer.clear();
-      long size = decompressor.decompressByteArray(outputBuffer.array(), 0, outputBuffer.capacity(), inputBuffer.array(), 0, inputBuffer.limit());
-      outputBuffer.limit((int)size);
+      int size = decompressor.decompress(inputBuffer.array(), 0, inputBuffer.limit(), outputBuffer.array(), 0, outputBuffer.capacity());
+      outputBuffer.limit(size);
       // We've decompressed the entire input, reset the input now
       inputBuffer.clear();
       inputBuffer.limit(0);
