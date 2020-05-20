@@ -124,15 +124,8 @@
     <module>parquet-generator</module>
     <module>parquet-hadoop</module>
     <module>parquet-jackson</module>
-    <module>parquet-pig</module>
-    <module>parquet-pig-bundle</module>
-    <module>parquet-protobuf</module>
-    <module>parquet-scala</module>
-    <module>parquet-scrooge</module>
     <module>parquet-thrift</module>
     <module>parquet-hadoop-bundle</module>
-    <module>parquet-hive</module>
-    <module>parquet-hive-bundle</module>
     <module>parquet-tools</module>
   </modules>
 
