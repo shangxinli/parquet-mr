@@ -21,8 +21,11 @@ package org.apache.parquet.hadoop.codec;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.compress.Compressor;
 import org.apache.parquet.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xerial.snappy.Snappy;
 import io.airlift.compress.zstd.ZstdCompressor;
+import com.github.luben.zstd.Zstd;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -32,6 +35,8 @@ import java.nio.ByteBuffer;
  * entire input in setInput and compresses it as one compressed block.
  */
 public class ZstandardCompressor implements Compressor {
+  private static final Logger LOG = LoggerFactory.getLogger(ZstandardCompressor.class);
+
   // Buffer for compressed output. This buffer grows as necessary.
   private ByteBuffer outputBuffer = ByteBuffer.allocate(0);
 
@@ -41,10 +46,13 @@ public class ZstandardCompressor implements Compressor {
   private long bytesRead = 0L;
   private long bytesWritten = 0L;
   private boolean finishCalled = false;
-  private io.airlift.compress.Compressor compressor = new io.airlift.compress.zstd.ZstdCompressor();
+  private int level = 3;
+  //
+  private Zstd compressor = new Zstd();
+  //private io.airlift.compress.Compressor compressor = new io.airlift.compress.zstd.ZstdCompressor();
 
-  public ZstandardCompressor() {
-    // no op
+  public ZstandardCompressor(int level) {
+    this.level = level;
   }
 
   /**
@@ -69,7 +77,7 @@ public class ZstandardCompressor implements Compressor {
 
     if (!outputBuffer.hasRemaining()) {
       // There is uncompressed input, compress it now
-      int maxOutputSize = compressor.maxCompressedLength(inputBuffer.position());
+      int maxOutputSize = inputBuffer.position();
         Snappy.maxCompressedLength(inputBuffer.position());
       if (maxOutputSize > outputBuffer.capacity()) {
         outputBuffer = ByteBuffer.allocate(maxOutputSize);
@@ -81,8 +89,9 @@ public class ZstandardCompressor implements Compressor {
 
       byte[] outputBytes = outputBuffer.array();
       byte[] inputBytes = inputBuffer.array();
-      int size = compressor.compress(inputBytes, 0, inputBuffer.limit(), outputBytes, 0, outputBuffer.capacity());
-      outputBuffer.limit(size);
+      LOG.info("zstd level is " + level);
+      long size = compressor.compressByteArray(outputBytes, 0, outputBuffer.capacity(), inputBytes, 0, inputBuffer.limit(), level);
+      outputBuffer.limit((int)size);
       inputBuffer.limit(0);
       inputBuffer.rewind();
     }

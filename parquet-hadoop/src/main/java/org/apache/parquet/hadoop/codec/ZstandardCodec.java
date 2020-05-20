@@ -54,7 +54,7 @@ public class ZstandardCodec implements Configurable, CompressionCodec {
 
   @Override
   public Compressor createCompressor() {
-    return new ZstandardCompressor();
+    return new ZstandardCompressor(conf.getInt("zstd.compression.level", 3));
   }
 
   @Override
