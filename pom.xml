@@ -9,7 +9,7 @@
 
   <groupId>org.apache.parquet</groupId>
   <artifactId>parquet</artifactId>
-  <version>1.12.0-ZSTD</version>
+  <version>1.12.0-AIRLIFT</version>
   <packaging>pom</packaging>
 
   <name>Apache Parquet MR</name>
