@@ -20,6 +20,7 @@ package org.apache.parquet.hadoop.codec;
 
 import com.github.luben.zstd.ZstdInputStream;
 import org.apache.hadoop.io.compress.CompressionInputStream;
+import org.apache.parquet.hadoop.ColumnChunkPageReadStore.ColumnChunkPageReader;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,11 +35,17 @@ public class ZstdDecompressorStream extends CompressionInputStream {
   }
 
   public int read(byte[] b, int off, int len) throws IOException {
-    return zstdInputStream.read(b, off, len);
+    long start = System.currentTimeMillis();
+    int ret = zstdInputStream.read(b, off, len);
+    ColumnChunkPageReader.deCompressTime += System.currentTimeMillis() - start;
+    return ret;
   }
 
   public int read() throws IOException {
-    return zstdInputStream.read();
+    long start = System.currentTimeMillis();
+    int ret =  zstdInputStream.read();
+    ColumnChunkPageReader.deCompressTime += System.currentTimeMillis() - start;
+    return ret;
   }
 
   public void resetState() throws IOException {

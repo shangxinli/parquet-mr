@@ -20,6 +20,8 @@ package org.apache.parquet.hadoop.codec;
 
 import com.github.luben.zstd.ZstdOutputStream;
 import org.apache.hadoop.io.compress.CompressionOutputStream;
+import org.apache.parquet.bytes.BytesInput;
+import org.apache.parquet.hadoop.ColumnChunkPageWriteStore;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -35,11 +37,16 @@ public class ZstdCompressorStream extends CompressionOutputStream {
   }
 
   public void write(byte[] b, int off, int len) throws IOException {
+    long start = System.currentTimeMillis();
     zstdOutputStream.write(b, off, len);
+    ColumnChunkPageWriteStore.compressTime += System.currentTimeMillis() - start;
+
   }
 
   public void write(int b) throws IOException {
+    long start = System.currentTimeMillis();
     zstdOutputStream.write(b);
+    ColumnChunkPageWriteStore.compressTime += System.currentTimeMillis() - start;
   }
 
   public void finish() throws IOException {

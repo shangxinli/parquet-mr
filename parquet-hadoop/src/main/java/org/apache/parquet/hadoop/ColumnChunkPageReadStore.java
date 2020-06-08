@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * in our format: columns, chunks, and pages
  *
  */
-class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore {
+public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore {
   private static final Logger LOG = LoggerFactory.getLogger(ColumnChunkPageReadStore.class);
 
   /**
@@ -59,7 +59,8 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
    * This implementation is provided with a list of pages, each of which
    * is decompressed and passed through.
    */
-  static final class ColumnChunkPageReader implements PageReader {
+  public static final class ColumnChunkPageReader implements PageReader {
+    public static long deCompressTime  = 0;
 
     private final BytesInputDecompressor decompressor;
     private final long valueCount;
@@ -100,7 +101,10 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
         @Override
         public DataPage visit(DataPageV1 dataPageV1) {
           try {
+            long start = System.currentTimeMillis();
             BytesInput decompressed = decompressor.decompress(dataPageV1.getBytes(), dataPageV1.getUncompressedSize());
+            ColumnChunkPageReader.deCompressTime += System.currentTimeMillis() - start;
+
             final DataPageV1 decompressedPage;
             if (offsetIndex == null) {
               decompressedPage = new DataPageV1(
@@ -156,7 +160,10 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
                 dataPageV2.getUncompressedSize()
                     - dataPageV2.getDefinitionLevels().size()
                     - dataPageV2.getRepetitionLevels().size());
+            long start = System.currentTimeMillis();
             BytesInput decompressed = decompressor.decompress(dataPageV2.getData(), uncompressedSize);
+            ColumnChunkPageReader.deCompressTime += System.currentTimeMillis() - start;
+
             if (offsetIndex == null) {
               return DataPageV2.uncompressed(
                   dataPageV2.getRowCount(),
@@ -192,8 +199,12 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
         return null;
       }
       try {
+        long start = System.currentTimeMillis();
+        BytesInput data = decompressor.decompress(compressedDictionaryPage.getBytes(), compressedDictionaryPage.getUncompressedSize());
+        ColumnChunkPageReader.deCompressTime += System.currentTimeMillis() - start;
+
         DictionaryPage decompressedPage = new DictionaryPage(
-          decompressor.decompress(compressedDictionaryPage.getBytes(), compressedDictionaryPage.getUncompressedSize()),
+          data,
           compressedDictionaryPage.getDictionarySize(),
           compressedDictionaryPage.getEncoding());
         if (compressedDictionaryPage.getCrc().isPresent()) {
