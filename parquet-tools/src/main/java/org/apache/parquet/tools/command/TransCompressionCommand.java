@@ -119,6 +119,7 @@ public class TransCompressionCommand extends ArgsOnlyCommand {
     HadoopInputFile inputFile = HadoopInputFile.fromPath(inpath, conf);
     ParquetReadOptions readOptions = HadoopReadOptions.builder(conf).build();
     reader = new ParquetFileReader(inputFile, readOptions);
+
     writer = new ParquetFileWriter(conf, schema, outpath, ParquetFileWriter.Mode.CREATE);
     writer.start();
     processBlocks(metaData, schema);
@@ -149,7 +150,7 @@ public class TransCompressionCommand extends ArgsOnlyCommand {
         long totalValues = creader.getTotalValueCount();
         List<PageWithHeader> pagesWithHeader = getPagesWithHeader(chunk);
         //TODO: We hardcoded it
-        CompressionCodecName compressionCodecName = CompressionCodecName.SNAPPY;
+        CompressionCodecName compressionCodecName = CompressionCodecName.ZSTD;
         List<PageWithHeader> transPagesWithHeader = transCompression(pagesWithHeader, chunk.getCodec(), compressionCodecName);
 
         writer.startColumn(columnDescriptor, totalValues, compressionCodecName);
