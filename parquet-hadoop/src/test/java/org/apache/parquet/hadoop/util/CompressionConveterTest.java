@@ -16,16 +16,14 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.parquet.cli.commands;
+package org.apache.parquet.hadoop.util;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
-import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ParquetProperties;
-import org.apache.parquet.column.page.DictionaryPage;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroup;
@@ -35,6 +33,7 @@ import org.apache.parquet.format.DataPageHeaderV2;
 import org.apache.parquet.format.DictionaryPageHeader;
 import org.apache.parquet.format.PageHeader;
 import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.ParquetFileWriter;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
@@ -44,7 +43,7 @@ import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
-import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.hadoop.util.CompressionConverter.TransParquetFileReader;
 import org.apache.parquet.internal.column.columnindex.ColumnIndex;
 import org.apache.parquet.internal.column.columnindex.OffsetIndex;
 import org.apache.parquet.io.ColumnIOFactory;
@@ -52,20 +51,17 @@ import org.apache.parquet.io.MessageColumnIO;
 import org.apache.parquet.io.RecordReader;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
-import org.apache.parquet.hadoop.util.CompressionConverter;
-import org.apache.parquet.hadoop.util.CompressionConverter.TransParquetFileReader;
 import org.apache.parquet.schema.PrimitiveType;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.List;
-import java.util.ArrayList;
-import org.apache.parquet.hadoop.util.CompressionConverter;
 
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BINARY;
@@ -74,10 +70,9 @@ import static org.apache.parquet.schema.Type.Repetition.OPTIONAL;
 import static org.apache.parquet.schema.Type.Repetition.REPEATED;
 import static org.apache.parquet.schema.Type.Repetition.REQUIRED;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class TransCompressionCommandTest extends ParquetFileTest  {
+public class CompressionConveterTest {
 
   private Configuration conf = new Configuration();
   private Map<String, String> extraMeta
@@ -86,23 +81,97 @@ public class TransCompressionCommandTest extends ParquetFileTest  {
 
   @Test
   public void testTransCompression() throws Exception {
-    int numRecord = 1000;
-    TestDocs testDocs = new TestDocs(numRecord);
+    String[] codecs = {"UNCOMPRESSED", "SNAPPY", "GZIP", "ZSTD"};
+    for (int i = 0; i < codecs.length; i++) {
+      for (int j = 0; j <codecs.length; j++) {
+        // Same codec for both are considered as valid test case
+        testInternal(codecs[i], codecs[j], ParquetProperties.WriterVersion.PARQUET_1_0, ParquetProperties.DEFAULT_PAGE_SIZE);
+        testInternal(codecs[i], codecs[j], ParquetProperties.WriterVersion.PARQUET_2_0, ParquetProperties.DEFAULT_PAGE_SIZE);
+        testInternal(codecs[i], codecs[j], ParquetProperties.WriterVersion.PARQUET_1_0, 64);
+        testInternal(codecs[i], codecs[j], ParquetProperties.WriterVersion.PARQUET_1_0, ParquetProperties.DEFAULT_PAGE_SIZE * 100);
+      }
+    }
+  }
 
-    String inputFile = createParquetFile("input", "GZIP", numRecord, ParquetProperties.WriterVersion.PARQUET_1_0,
-      ParquetProperties.DEFAULT_PAGE_SIZE, testDocs);
+  @Test
+  public void testSpeed() throws Exception {
+    int numRecord = 100000;
+    TestDocs testDocs = new TestDocs(numRecord);
+    String inputFile = createParquetFile(conf, extraMeta, numRecord, "input", "GZIP",
+      ParquetProperties.WriterVersion.PARQUET_1_0, ParquetProperties.DEFAULT_PAGE_SIZE, testDocs);
     String outputFile = createTempFile("output_trans");
 
-    TransCompressionCommand command = new TransCompressionCommand(createLogger());
-    command.setConf(new Configuration());
-    command.input = inputFile;
-    command.output = outputFile;
-    command.codec = "ZSTD";
-    command.run();
+    String cargs[] = {inputFile, outputFile, "ZSTD"};
 
-    validateColumns(outputFile, numRecord, testDocs);
+    long start = System.currentTimeMillis();
+    convertCompression(conf, inputFile, outputFile, "ZSTD");
+    long durationTrans = System.currentTimeMillis() - start;
+
+    outputFile = createTempFile("output_record");
+    start = System.currentTimeMillis();
+    convertRecordByRecord(CompressionCodecName.valueOf("ZSTD"), new Path(inputFile), new Path(outputFile));
+    long durationRecord = System.currentTimeMillis() - start;
+
+    // The TransCompressionCommand is ~5 times faster than translating record by record
+    Assert.assertTrue(durationTrans < durationRecord);
+  }
+
+  private void testInternal(String srcCodec, String destCodec, ParquetProperties.WriterVersion writerVersion, int pageSize) throws Exception {
+    int numRecord = 1000;
+    TestDocs testDocs = new TestDocs(numRecord);
+    String inputFile = createParquetFile(conf, extraMeta, numRecord, "input", srcCodec, writerVersion, pageSize, testDocs);
+    String outputFile = createTempFile("output_trans");
+
+    convertCompression(conf, inputFile, outputFile, destCodec);
+
+    validateColumns(inputFile, numRecord, testDocs);
     validMeta(inputFile, outputFile);
     validColumnIndex(inputFile, outputFile);
+  }
+
+  private void convertCompression(Configuration conf, String inputFile, String outputFile, String codec) throws IOException {
+    Path inPath = new Path(inputFile);
+    Path outPath = new Path(outputFile);
+    CompressionCodecName codecName = CompressionCodecName.valueOf(codec);
+
+    ParquetMetadata metaData = ParquetFileReader.readFooter(conf, inPath, NO_FILTER);
+    MessageType schema = metaData.getFileMetaData().getSchema();
+    ParquetFileWriter writer = new ParquetFileWriter(conf, schema, outPath, ParquetFileWriter.Mode.CREATE);
+    writer.start();
+
+    try (TransParquetFileReader reader = new TransParquetFileReader(HadoopInputFile.fromPath(inPath, conf), HadoopReadOptions.builder(conf).build())) {
+      compressionConverter.processBlocks(reader, writer, metaData, schema, metaData.getFileMetaData().getCreatedBy(), codecName);
+    } finally {
+      writer.end(metaData.getFileMetaData().getKeyValueMetaData());
+    }
+  }
+
+  private void convertRecordByRecord(CompressionCodecName codecName, Path inpath, Path outpath) throws Exception {
+    ParquetMetadata metaData = ParquetFileReader.readFooter(conf, inpath, NO_FILTER);
+    MessageType schema = metaData.getFileMetaData().getSchema();
+    HadoopInputFile inputFile = HadoopInputFile.fromPath(inpath, conf);
+    ParquetReadOptions readOptions = HadoopReadOptions.builder(conf).build();
+
+    conf.set(GroupWriteSupport.PARQUET_EXAMPLE_SCHEMA, schema.toString());
+    ExampleParquetWriter.Builder builder = ExampleParquetWriter.builder(outpath).withConf(conf).withCompressionCodec(codecName);
+
+    ParquetWriter parquetWriter = builder.build();
+
+    PageReadStore pages;
+    ParquetFileReader reader = new ParquetFileReader(inputFile, readOptions);
+
+    while ((pages = reader.readNextRowGroup()) != null) {
+      long rows = pages.getRowCount();
+      MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(schema);
+      RecordReader recordReader = columnIO.getRecordReader(pages, new GroupRecordConverter(schema));
+
+      for (int i = 0; i < rows; i++) {
+        SimpleGroup simpleGroup = (SimpleGroup) recordReader.read();
+        parquetWriter.write(simpleGroup);
+      }
+    }
+
+    parquetWriter.close();
   }
 
   private void validateColumns(String file, int numRecord, TestDocs testDocs) throws IOException {
@@ -205,8 +274,8 @@ public class TransCompressionCommandTest extends ParquetFileTest  {
     return offsets;
   }
 
-  private String createParquetFile(String prefix, String codec, int numRecord, ParquetProperties.WriterVersion writerVersion,
-                                   int pageSize, TestDocs testDocs) throws IOException {
+  public static String createParquetFile(Configuration conf, Map<String, String> extraMeta, int numRecord, String prefix, String codec,
+                                         ParquetProperties.WriterVersion writerVersion, int pageSize, TestDocs testDocs) throws IOException {
     MessageType schema = new MessageType("schema",
       new PrimitiveType(REQUIRED, INT64, "DocId"),
       new PrimitiveType(REQUIRED, BINARY, "Name"),
@@ -256,7 +325,7 @@ public class TransCompressionCommandTest extends ParquetFileTest  {
     return sb.toString();
   }
 
-  private static String createTempFile(String prefix) {
+  public static String createTempFile(String prefix) {
     try {
       return Files.createTempDirectory(prefix).toAbsolutePath().toString() + "/test.parquet";
     } catch (IOException e) {
