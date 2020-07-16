@@ -130,7 +130,7 @@ public class HadoopReadOptions extends ParquetReadOptions {
     }
   }
 
-  private static FileDecryptionProperties createDecryptionProperties(Path file, Configuration hadoopConfig) {
+  public static FileDecryptionProperties createDecryptionProperties(Path file, Configuration hadoopConfig) {
     DecryptionPropertiesFactory cryptoFactory = DecryptionPropertiesFactory.loadFactory(hadoopConfig);
     if (null == cryptoFactory) {
       return null;

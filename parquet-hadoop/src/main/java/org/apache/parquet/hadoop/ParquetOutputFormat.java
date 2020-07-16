@@ -37,7 +37,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import org.apache.parquet.column.ParquetProperties;
 import org.apache.parquet.column.ParquetProperties.WriterVersion;
-import org.apache.parquet.crypto.EncryptionPropertiesFactory;
 import org.apache.parquet.crypto.FileEncryptionProperties;
 import org.apache.parquet.hadoop.ParquetFileWriter.Mode;
 import org.apache.parquet.hadoop.api.WriteSupport;
@@ -45,6 +44,7 @@ import org.apache.parquet.hadoop.api.WriteSupport.WriteContext;
 import org.apache.parquet.hadoop.codec.CodecConfig;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
+import org.apache.parquet.hadoop.util.ContextUtil;
 import org.apache.parquet.hadoop.util.HadoopOutputFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -475,7 +475,7 @@ public class ParquetOutputFormat<T> extends FileOutputFormat<Void, T> {
 
     WriteContext fileWriteContext = writeSupport.init(conf);
     
-    FileEncryptionProperties encryptionProperties = createEncryptionProperties(conf, file, fileWriteContext);
+    FileEncryptionProperties encryptionProperties = ContextUtil.createEncryptionProperties(conf, file, fileWriteContext);
     
     ParquetFileWriter w = new ParquetFileWriter(HadoopOutputFile.fromPath(file, conf),
         fileWriteContext.getSchema(), mode, blockSize, maxPaddingSize, props.getColumnIndexTruncateLength(),
@@ -543,14 +543,5 @@ public class ParquetOutputFormat<T> extends FileOutputFormat<Void, T> {
 
   public synchronized static MemoryManager getMemoryManager() {
     return memoryManager;
-  }
-  
-  private static FileEncryptionProperties createEncryptionProperties(Configuration fileHadoopConfig, Path tempFilePath, 
-      WriteContext fileWriteContext) {
-    EncryptionPropertiesFactory cryptoFactory = EncryptionPropertiesFactory.loadFactory(fileHadoopConfig);
-    if (null == cryptoFactory) {
-      return null;
-    }
-    return cryptoFactory.getFileEncryptionProperties(fileHadoopConfig, tempFilePath, fileWriteContext);
   }
 }

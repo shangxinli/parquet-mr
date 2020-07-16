@@ -511,6 +511,7 @@ public class ParquetFileReader implements Closeable {
     ParquetReadOptions options;
     if (file instanceof HadoopInputFile) {
       HadoopInputFile hadoopFile = (HadoopInputFile) file;
+      // TODO: add options for decrykptionProperiteis
       options = HadoopReadOptions.builder(hadoopFile.getConfiguration(), hadoopFile.getPath())
           .withMetadataFilter(filter).build();
     } else {
@@ -707,8 +708,10 @@ public class ParquetFileReader implements Closeable {
     this.file = HadoopInputFile.fromPath(filePath, configuration);
     this.fileMetaData = fileMetaData;
     this.f = file.newStream();
+    //readFooter() will make it present
     this.fileDecryptor = fileMetaData.getFileDecryptor();
     if (null == fileDecryptor) {
+      //TODO: the build() will build encryption properties
       this.options = HadoopReadOptions.builder(configuration).build();
     } else {
       this.options = HadoopReadOptions.builder(configuration)

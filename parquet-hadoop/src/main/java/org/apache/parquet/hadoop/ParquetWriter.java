@@ -30,6 +30,7 @@ import org.apache.parquet.crypto.FileEncryptionProperties;
 import org.apache.parquet.hadoop.api.WriteSupport;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.util.ContextUtil;
 import org.apache.parquet.hadoop.util.HadoopOutputFile;
 import org.apache.parquet.io.OutputFile;
 import org.apache.parquet.schema.MessageType;
@@ -278,6 +279,11 @@ public class ParquetWriter<T> implements Closeable {
 
     WriteSupport.WriteContext writeContext = writeSupport.init(conf);
     MessageType schema = writeContext.getSchema();
+
+    // encryptionProperties could be built from the implementation of EncryptionPropertiesFactory when it is attached.
+    if (encryptionProperties == null) {
+      encryptionProperties = ContextUtil.createEncryptionProperties(conf, new Path(file.toString()), writeContext);
+    }
 
     ParquetFileWriter fileWriter = new ParquetFileWriter(
       file, schema, mode, rowGroupSize, maxPaddingSize,

@@ -120,6 +120,7 @@ public class ParquetReader<T> implements Closeable {
                         ReadSupport<T> readSupport) throws IOException {
     this.readSupport = readSupport;
     this.options = options;
+    //TODO: not needed
     this.filesIterator = files.iterator();
   }
 
@@ -313,7 +314,7 @@ public class ParquetReader<T> implements Closeable {
     }
     
     public Builder<T> withDecryption(FileDecryptionProperties fileDecryptionProperties) {
-      optionsBuilder.withDecryption(fileDecryptionProperties);
+        optionsBuilder.withDecryption(fileDecryptionProperties);
       return this;
     }
 
