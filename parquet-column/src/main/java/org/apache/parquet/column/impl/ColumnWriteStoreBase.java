@@ -191,6 +191,17 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
   }
 
   @Override
+  public void flushColumn(ColumnDescriptor path) {
+    System.out.println("->ColumnWriteStoreBase: flushColumn");
+    ColumnWriterBase memColumn = columns.get(path);
+    long rows = rowCount - memColumn.getRowsWrittenSoFar();
+    if (rows > 0) {
+      memColumn.writePage();
+    }
+    memColumn.finalizeColumnChunk();
+  }
+
+  @Override
   public String memUsageString() {
     StringBuilder b = new StringBuilder("Store {\n");
     for (ColumnWriterBase memColumn : columns.values()) {
@@ -220,8 +231,6 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
 
   @Override
   public void endRecord() {
-    System.out.println("ColumnWriteStoreBase: endRecord");
-
     ++rowCount;
     if (rowCount >= rowCountForNextSizeCheck) {
       sizeCheck();

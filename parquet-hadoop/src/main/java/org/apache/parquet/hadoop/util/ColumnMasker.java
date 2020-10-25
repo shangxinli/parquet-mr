@@ -161,9 +161,8 @@ public class ColumnMasker {
       }
       cStore.endRecord();
     }
-    cStore.flush();
+    cStore.flushColumn(descriptor);
     columnChunkPageWriteStore.flushColumnToFileWriter(writer, descriptor);
-    cStore.close();
 
     /*BytesInput data = cWriter.concatWriters();
     Statistics statistics = convertStatisticsNullify(chunk.getPrimitiveType(), totalChunkValues);
