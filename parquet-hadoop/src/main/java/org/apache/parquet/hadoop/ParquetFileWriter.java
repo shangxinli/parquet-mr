@@ -774,6 +774,7 @@ public class ParquetFileWriter {
       int rowGroupOrdinal, 
       int columnOrdinal,
       byte[] fileAAD) throws IOException {
+
     startColumn(descriptor, valueCount, compressionCodecName);
 
     state = state.write();

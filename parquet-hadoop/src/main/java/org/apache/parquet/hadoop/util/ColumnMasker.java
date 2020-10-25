@@ -18,9 +18,12 @@
  */
 package org.apache.parquet.hadoop.util;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.parquet.bytes.ByteBufferAllocator;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.ColumnReader;
+import org.apache.parquet.column.ColumnWriteStore;
 import org.apache.parquet.column.ColumnWriter;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.ParquetProperties;
@@ -33,6 +36,9 @@ import org.apache.parquet.column.page.PageWriteStore;
 import org.apache.parquet.column.page.PageWriter;
 import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.column.values.bloomfilter.BloomFilter;
+import org.apache.parquet.compression.CompressionCodecFactory;
+import org.apache.parquet.hadoop.CodecFactory;
+import org.apache.parquet.hadoop.ColumnChunkPageWriteStore;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -122,13 +128,29 @@ public class ColumnMasker {
     int dMax = descriptor.getMaxDefinitionLevel();
     ColumnReader cReader = crStore.getColumnReader(descriptor);
 
-    writer.startColumn(descriptor, totalChunkValues, CompressionCodecName.UNCOMPRESSED);
-
     WriterVersion writerVersion = chunk.getEncodingStats().usesV2Pages() ? WriterVersion.PARQUET_2_0 : WriterVersion.PARQUET_1_0;
     ParquetProperties props = ParquetProperties.builder()
       .withWriterVersion(writerVersion)
       .build();
-    ColumnWriter cWriter = props.newColumnWriteStore(schema, new DummyPageWriterStore()).getColumnWriter(descriptor);
+
+    CodecFactory codecFactory = new CodecFactory(new Configuration(), props.getPageSizeThreshold());
+    CodecFactory.BytesCompressor compressor =	codecFactory.getCompressor(chunk.getCodec());
+
+    /*Type columnType = schema.getType(descriptor.getPath());
+    MessageType newSchema = new MessageType(columnType.getName(), columnType);
+
+    ColumnChunkPageWriteStore columnChunkPageWriteStore = new ColumnChunkPageWriteStore(compressor, newSchema, props.getAllocator(),
+    props.getColumnIndexTruncateLength());
+
+    ColumnWriteStore cStore = props.newColumnWriteStore(newSchema, columnChunkPageWriteStore);
+    ColumnWriter cWriter = cStore.getColumnWriter(descriptor); */
+
+    ColumnChunkPageWriteStore columnChunkPageWriteStore = new ColumnChunkPageWriteStore(compressor, schema, props.getAllocator(),
+      props.getColumnIndexTruncateLength());
+
+    ColumnWriteStore cStore = props.newColumnWriteStore(schema, columnChunkPageWriteStore);
+    ColumnWriter cWriter = cStore.getColumnWriter(descriptor);
+
 
     for (int i = 0; i < totalChunkValues; i++) {
       int rlvl = cReader.getCurrentRepetitionLevel();
@@ -145,19 +167,10 @@ public class ColumnMasker {
       } else {
         cWriter.writeNull(rlvl, dlvl);
       }
+      cStore.endRecord();
     }
-
-    BytesInput data = cWriter.concatWriters();
-    Statistics statistics = convertStatisticsNullify(chunk.getPrimitiveType(), totalChunkValues);
-    writer.writeDataPage(toIntWithCheck(totalChunkValues),
-      toIntWithCheck(data.size()),
-      data,
-      statistics,
-      toIntWithCheck(totalChunkValues),
-      Encoding.RLE,
-      Encoding.RLE,
-      Encoding.PLAIN);
-    writer.endColumn();
+    cStore.flushColumn(descriptor);
+    columnChunkPageWriteStore.flushColumnToFileWriter(writer, descriptor);
   }
 
   private Statistics convertStatisticsNullify(PrimitiveType type, long rowCount) throws IOException {
@@ -214,61 +227,5 @@ public class ColumnMasker {
 
   private static final class DummyConverter extends PrimitiveConverter {
     @Override public GroupConverter asGroupConverter() { return new DummyGroupConverter(); }
-  }
-
-  class DummyPageWriterStore implements PageWriteStore {
-    @Override
-    public PageWriter getPageWriter(ColumnDescriptor path){
-      return new DummyPageWriter();
-    }
-  }
-
-  class DummyPageWriter implements PageWriter {
-
-    public DummyPageWriter() {}
-
-    @Override
-    public void writePage(BytesInput bytesInput, int valueCount, Statistics statistics, Encoding rlEncoding,
-                          Encoding dlEncoding, Encoding valuesEncoding)
-      throws IOException {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void writePage(BytesInput bytesInput, int valueCount, int rowCount, Statistics<?> statistics,
-                          Encoding rlEncoding, Encoding dlEncoding, Encoding valuesEncoding) throws IOException {
-      writePage(bytesInput, valueCount, statistics, rlEncoding, dlEncoding, valuesEncoding);
-    }
-
-    @Override
-    public void writePageV2(int rowCount, int nullCount, int valueCount,
-                            BytesInput repetitionLevels, BytesInput definitionLevels,
-                            Encoding dataEncoding, BytesInput data, Statistics<?> statistics) throws IOException {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public long getMemSize() {
-      throw new UnsupportedOperationException();
-    }
-
-    public List<DataPage> getPages() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public long allocatedSize() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void writeDictionaryPage(DictionaryPage dictionaryPage) throws IOException {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String memUsageString(String prefix) {
-      throw new UnsupportedOperationException();
-    }
   }
 }
