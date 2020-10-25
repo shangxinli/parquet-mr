@@ -75,7 +75,6 @@ public class ColumnMaskerTest {
     inputFile = createParquetFile(conf, extraMeta, numRecord, "input", "GZIP",
       ParquetProperties.WriterVersion.PARQUET_1_0, ParquetProperties.DEFAULT_PAGE_SIZE, testDocs);
     outputFile = createTempFile("test");
-    System.out.println("------------------------------------------------");
     nullifyColumns(conf, inputFile, outputFile);
   }
 

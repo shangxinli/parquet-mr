@@ -403,8 +403,6 @@ public class ParquetFileWriter {
    * @throws IOException if there is an error while writing
    */
   public void startBlock(long recordCount) throws IOException {
-    System.out.println("->ParquetFileWriter: startBlock");
-
     state = state.startBlock();
     LOG.debug("{}: start block", out.getPos());
 //    out.write(MAGIC); // TODO: add a magic delimiter
@@ -430,7 +428,6 @@ public class ParquetFileWriter {
   public void startColumn(ColumnDescriptor descriptor,
                           long valueCount,
                           CompressionCodecName compressionCodecName) throws IOException {
-    System.out.println("--->ParquetFileWriter: StartColumn");
     state = state.startColumn();
     encodingStatsBuilder.clear();
     currentEncodings = new HashSet<Encoding>();
@@ -777,7 +774,6 @@ public class ParquetFileWriter {
       int rowGroupOrdinal, 
       int columnOrdinal,
       byte[] fileAAD) throws IOException {
-    System.out.println("-->ParquetFileWriter: writeColumnChunk");
 
     startColumn(descriptor, valueCount, compressionCodecName);
 
@@ -831,8 +827,6 @@ public class ParquetFileWriter {
    * @throws IOException if there is an error while writing
    */
   public void endColumn() throws IOException {
-    System.out.println("--->ParquetFileWriter: endColumn");
-
     state = state.endColumn();
     LOG.debug("{}: end column", out.getPos());
     if (columnIndexBuilder.getMinMaxSize() > columnIndexBuilder.getPageCount() * MAX_STATS_SIZE) {
@@ -865,8 +859,6 @@ public class ParquetFileWriter {
    * @throws IOException if there is an error while writing
    */
   public void endBlock() throws IOException {
-    System.out.println("->ParquetFileWriter: endBlock");
-
     state = state.endBlock();
     LOG.debug("{}: end block", out.getPos());
     currentBlock.setRowCount(currentRecordCount);
@@ -1093,8 +1085,6 @@ public class ParquetFileWriter {
    * @throws IOException if there is an error while writing
    */
   public void end(Map<String, String> extraMetaData) throws IOException {
-    System.out.println("ParquetFileWriter: end");
-
     state = state.end();
     serializeColumnIndexes(columnIndexes, blocks, out, fileEncryptor);
     serializeOffsetIndexes(offsetIndexes, blocks, out, fileEncryptor);

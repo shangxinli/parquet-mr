@@ -156,7 +156,6 @@ public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWri
                           Encoding rlEncoding,
                           Encoding dlEncoding,
                           Encoding valuesEncoding) throws IOException {
-      System.out.println("-->ColumnChunkPageWriteStore: writePage");
       pageOrdinal++;
       long uncompressedSize = bytes.size();
       if (uncompressedSize > Integer.MAX_VALUE) {
@@ -305,8 +304,6 @@ public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWri
     }
 
     public void writeToFileWriter(ParquetFileWriter writer) throws IOException {
-      System.out.println("--ColumnChunkPageWriter: writeToFileWriter");
-
       if (null == headerBlockEncryptor) {
         writer.writeColumnChunk(
             path,
@@ -454,8 +451,6 @@ public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWri
   }
 
   public void flushToFileWriter(ParquetFileWriter writer) throws IOException {
-    System.out.println("->ColumnChunkPageWriteStore: flushToFileWriter");
-
     for (ColumnDescriptor path : schema.getColumns()) {
       ColumnChunkPageWriter pageWriter = writers.get(path);
       pageWriter.writeToFileWriter(writer);
@@ -463,7 +458,6 @@ public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWri
   }
 
   public void flushColumnToFileWriter(ParquetFileWriter writer, ColumnDescriptor path) throws IOException {
-    System.out.println("ColumnChunkPageWriteStore: flushColumnToFileWriter");
     ColumnChunkPageWriter pageWriter = writers.get(path);
     pageWriter.writeToFileWriter(writer);
   }

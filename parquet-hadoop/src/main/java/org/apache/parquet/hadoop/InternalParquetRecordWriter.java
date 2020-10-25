@@ -181,7 +181,6 @@ class InternalParquetRecordWriter<T> {
 
     if (recordCount > 0) {
       rowGroupOrdinal++;
-      System.out.println("InternalParquetRecordWriter: flushRowGroupToStore");
       parquetFileWriter.startBlock(recordCount);
       columnStore.flush();
       pageStore.flushToFileWriter(parquetFileWriter);

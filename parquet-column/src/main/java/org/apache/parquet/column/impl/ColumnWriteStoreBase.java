@@ -180,7 +180,6 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
 
   @Override
   public void flush() {
-    System.out.println("->ColumnWriteStoreBase: flush");
     for (ColumnWriterBase memColumn : columns.values()) {
       long rows = rowCount - memColumn.getRowsWrittenSoFar();
       if (rows > 0) {
@@ -192,7 +191,6 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
 
   @Override
   public void flushColumn(ColumnDescriptor path) {
-    System.out.println("->ColumnWriteStoreBase: flushColumn");
     ColumnWriterBase memColumn = columns.get(path);
     long rows = rowCount - memColumn.getRowsWrittenSoFar();
     if (rows > 0) {
@@ -221,8 +219,6 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
 
   @Override
   public void close() {
-    System.out.println("ColumnWriteStoreBase: close");
-
     flush(); // calling flush() here to keep it consistent with the behavior before merging with master
     for (ColumnWriterBase memColumn : columns.values()) {
       memColumn.close();
