@@ -18,9 +18,12 @@
  */
 package org.apache.parquet.hadoop.util;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.parquet.bytes.ByteBufferAllocator;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.ColumnReader;
+import org.apache.parquet.column.ColumnWriteStore;
 import org.apache.parquet.column.ColumnWriter;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.ParquetProperties;
@@ -33,6 +36,9 @@ import org.apache.parquet.column.page.PageWriteStore;
 import org.apache.parquet.column.page.PageWriter;
 import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.column.values.bloomfilter.BloomFilter;
+import org.apache.parquet.compression.CompressionCodecFactory;
+import org.apache.parquet.hadoop.CodecFactory;
+import org.apache.parquet.hadoop.ColumnChunkPageWriteStore;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -122,13 +128,21 @@ public class ColumnMasker {
     int dMax = descriptor.getMaxDefinitionLevel();
     ColumnReader cReader = crStore.getColumnReader(descriptor);
 
-    writer.startColumn(descriptor, totalChunkValues, CompressionCodecName.UNCOMPRESSED);
+    //writer.startColumn(descriptor, totalChunkValues, CompressionCodecName.UNCOMPRESSED);
 
     WriterVersion writerVersion = chunk.getEncodingStats().usesV2Pages() ? WriterVersion.PARQUET_2_0 : WriterVersion.PARQUET_1_0;
     ParquetProperties props = ParquetProperties.builder()
       .withWriterVersion(writerVersion)
       .build();
-    ColumnWriter cWriter = props.newColumnWriteStore(schema, new DummyPageWriterStore()).getColumnWriter(descriptor);
+
+    CodecFactory codecFactory = new CodecFactory(new Configuration(), props.getPageSizeThreshold());
+    CodecFactory.BytesCompressor compressor =	codecFactory.getCompressor(chunk.getCodec());
+
+    ColumnChunkPageWriteStore columnChunkPageWriteStore = new ColumnChunkPageWriteStore(compressor, schema, props.getAllocator(),
+    props.getColumnIndexTruncateLength());
+
+    ColumnWriteStore cStore = props.newColumnWriteStore(schema, columnChunkPageWriteStore);
+    ColumnWriter cWriter = cStore.getColumnWriter(descriptor);
 
     for (int i = 0; i < totalChunkValues; i++) {
       int rlvl = cReader.getCurrentRepetitionLevel();
@@ -145,9 +159,13 @@ public class ColumnMasker {
       } else {
         cWriter.writeNull(rlvl, dlvl);
       }
+      cStore.endRecord();
     }
+    cStore.flush();
+    columnChunkPageWriteStore.flushColumnToFileWriter(writer, descriptor);
+    cStore.close();
 
-    BytesInput data = cWriter.concatWriters();
+    /*BytesInput data = cWriter.concatWriters();
     Statistics statistics = convertStatisticsNullify(chunk.getPrimitiveType(), totalChunkValues);
     writer.writeDataPage(toIntWithCheck(totalChunkValues),
       toIntWithCheck(data.size()),
@@ -157,7 +175,17 @@ public class ColumnMasker {
       Encoding.RLE,
       Encoding.RLE,
       Encoding.PLAIN);
-    writer.endColumn();
+
+    writer.endColumn(); */
+
+    /**
+     parquetFileWriter.startBlock(recordCount);
+     columnStore.flush();
+     pageStore.flushToFileWriter(parquetFileWriter);
+     recordCount = 0;
+     parquetFileWriter.endBlock();
+
+     * */
   }
 
   private Statistics convertStatisticsNullify(PrimitiveType type, long rowCount) throws IOException {

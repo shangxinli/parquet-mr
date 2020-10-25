@@ -64,7 +64,7 @@ public class ColumnMaskerTest {
   private Map<String, String> extraMeta = ImmutableMap.of("key1", "value1", "key2", "value2");
   private ColumnMasker columnMasker = new ColumnMasker();
   private Random rnd = new Random(5);
-  private final int numRecord = 1000;
+  private final int numRecord = 2;
   private String inputFile = null;
   private String outputFile = null;
   private TestDocs testDocs = null;
@@ -72,9 +72,10 @@ public class ColumnMaskerTest {
   @Before
   public void testSetup() throws Exception {
     testDocs = new TestDocs(numRecord);
-    inputFile = createParquetFile(conf, extraMeta, numRecord, "input", "GZIP",
+    inputFile = createParquetFile2(conf, extraMeta, numRecord, "input", "GZIP",
       ParquetProperties.WriterVersion.PARQUET_1_0, ParquetProperties.DEFAULT_PAGE_SIZE, testDocs);
     outputFile = createTempFile("test");
+    System.out.println("------------------------------------------------");
     nullifyColumns(conf, inputFile, outputFile);
   }
 
@@ -159,6 +160,34 @@ public class ColumnMaskerTest {
         Group links = g.addGroup("Links");
         links.add(0, testDocs.linkBackward[i]);
         links.add(1, testDocs.linkForward[i]);
+        writer.write(g);
+      }
+    }
+
+    return file;
+  }
+
+  private String createParquetFile2(Configuration conf, Map<String, String> extraMeta, int numRecord, String prefix, String codec,
+                                   ParquetProperties.WriterVersion writerVersion, int pageSize, TestDocs testDocs) throws IOException {
+    MessageType schema = new MessageType("schema",
+      new PrimitiveType(OPTIONAL, INT64, "DocId"));
+
+    conf.set(GroupWriteSupport.PARQUET_EXAMPLE_SCHEMA, schema.toString());
+
+    String file = createTempFile(prefix);
+    ExampleParquetWriter.Builder builder = ExampleParquetWriter.builder(new Path(file))
+      .withConf(conf)
+      .withWriterVersion(writerVersion)
+      .withExtraMetaData(extraMeta)
+      .withDictionaryEncoding("DocId", true)
+      .withValidation(true)
+      .enablePageWriteChecksum()
+      .withPageSize(pageSize)
+      .withCompressionCodec(CompressionCodecName.valueOf(codec));
+    try (ParquetWriter writer = builder.build()) {
+      for (int i = 0; i < numRecord; i++) {
+        SimpleGroup g = new SimpleGroup(schema);
+        g.add("DocId", testDocs.docId[i]);
         writer.write(g);
       }
     }

@@ -56,7 +56,7 @@ import org.apache.parquet.bytes.ByteBufferAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWriteStore {
+public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWriteStore {
   private static final Logger LOG = LoggerFactory.getLogger(ColumnChunkPageWriteStore.class);
 
   private static ParquetMetadataConverter parquetMetadataConverter = new ParquetMetadataConverter();
@@ -156,6 +156,7 @@ class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWriteStore
                           Encoding rlEncoding,
                           Encoding dlEncoding,
                           Encoding valuesEncoding) throws IOException {
+      System.out.println("-->ColumnChunkPageWriteStore: writePage");
       pageOrdinal++;
       long uncompressedSize = bytes.size();
       if (uncompressedSize > Integer.MAX_VALUE) {
@@ -304,6 +305,8 @@ class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWriteStore
     }
 
     public void writeToFileWriter(ParquetFileWriter writer) throws IOException {
+      System.out.println("--ColumnChunkPageWriter: writeToFileWriter");
+
       if (null == headerBlockEncryptor) {
         writer.writeColumnChunk(
             path,
@@ -451,10 +454,17 @@ class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWriteStore
   }
 
   public void flushToFileWriter(ParquetFileWriter writer) throws IOException {
+    System.out.println("->ColumnChunkPageWriteStore: flushToFileWriter");
+
     for (ColumnDescriptor path : schema.getColumns()) {
       ColumnChunkPageWriter pageWriter = writers.get(path);
       pageWriter.writeToFileWriter(writer);
     }
   }
 
+  public void flushColumnToFileWriter(ParquetFileWriter writer, ColumnDescriptor path) throws IOException {
+    System.out.println("ColumnChunkPageWriteStore: flushColumnToFileWriter");
+    ColumnChunkPageWriter pageWriter = writers.get(path);
+    pageWriter.writeToFileWriter(writer);
+  }
 }
