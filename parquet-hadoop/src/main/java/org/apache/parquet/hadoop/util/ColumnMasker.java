@@ -128,8 +128,6 @@ public class ColumnMasker {
     int dMax = descriptor.getMaxDefinitionLevel();
     ColumnReader cReader = crStore.getColumnReader(descriptor);
 
-    //writer.startColumn(descriptor, totalChunkValues, CompressionCodecName.UNCOMPRESSED);
-
     WriterVersion writerVersion = chunk.getEncodingStats().usesV2Pages() ? WriterVersion.PARQUET_2_0 : WriterVersion.PARQUET_1_0;
     ParquetProperties props = ParquetProperties.builder()
       .withWriterVersion(writerVersion)
@@ -163,28 +161,6 @@ public class ColumnMasker {
     }
     cStore.flushColumn(descriptor);
     columnChunkPageWriteStore.flushColumnToFileWriter(writer, descriptor);
-
-    /*BytesInput data = cWriter.concatWriters();
-    Statistics statistics = convertStatisticsNullify(chunk.getPrimitiveType(), totalChunkValues);
-    writer.writeDataPage(toIntWithCheck(totalChunkValues),
-      toIntWithCheck(data.size()),
-      data,
-      statistics,
-      toIntWithCheck(totalChunkValues),
-      Encoding.RLE,
-      Encoding.RLE,
-      Encoding.PLAIN);
-
-    writer.endColumn(); */
-
-    /**
-     parquetFileWriter.startBlock(recordCount);
-     columnStore.flush();
-     pageStore.flushToFileWriter(parquetFileWriter);
-     recordCount = 0;
-     parquetFileWriter.endBlock();
-
-     * */
   }
 
   private Statistics convertStatisticsNullify(PrimitiveType type, long rowCount) throws IOException {

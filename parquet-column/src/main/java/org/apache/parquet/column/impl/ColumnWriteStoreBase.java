@@ -229,42 +229,74 @@ abstract class ColumnWriteStoreBase implements ColumnWriteStore {
   public void endRecord() {
     ++rowCount;
     if (rowCount >= rowCountForNextSizeCheck) {
-      sizeCheck();
+      sizeCheckForAll();
     }
   }
 
-  private void sizeCheck() {
+  public void endFieledForColumn(ColumnDescriptor path) {
+    sizeCheckForColumn(path);
+  }
+
+  private void sizeCheckForAll() {
     long minRecordToWait = Long.MAX_VALUE;
     int pageRowCountLimit = props.getPageRowCountLimit();
     long rowCountForNextRowCountCheck = rowCount + pageRowCountLimit;
     for (ColumnWriterBase writer : columns.values()) {
-      long usedMem = writer.getCurrentPageBufferedSize();
-      long rows = rowCount - writer.getRowsWrittenSoFar();
-      long remainingMem = props.getPageSizeThreshold() - usedMem;
-      if (remainingMem <= thresholdTolerance || rows >= pageRowCountLimit) {
-        writer.writePage();
-        remainingMem = props.getPageSizeThreshold();
-      } else {
-        rowCountForNextRowCountCheck = min(rowCountForNextRowCountCheck, writer.getRowsWrittenSoFar() + pageRowCountLimit);
-      }
-      long rowsToFillPage =
-          usedMem == 0 ?
-              props.getMaxRowCountForPageSizeCheck()
-              : (long) rows / usedMem * remainingMem;
-      if (rowsToFillPage < minRecordToWait) {
-        minRecordToWait = rowsToFillPage;
-      }
+      long[] counts = checkColumn(writer, pageRowCountLimit, minRecordToWait, rowCountForNextRowCountCheck);
+      minRecordToWait = counts[0];
+      rowCountForNextRowCountCheck = counts[1];
     }
     if (minRecordToWait == Long.MAX_VALUE) {
       minRecordToWait = props.getMinRowCountForPageSizeCheck();
     }
+    updateRowCountSizeCheck(minRecordToWait, rowCountForNextRowCountCheck);
+  }
 
+  private void sizeCheckForColumn(ColumnDescriptor path) {
+    long minRecordToWait = Long.MAX_VALUE;
+    int pageRowCountLimit = props.getPageRowCountLimit();
+    long rowCountForNextRowCountCheck = rowCount + pageRowCountLimit;
+
+    ColumnWriterBase writer = columns.get(path);
+    long[] counts = checkColumn(writer, pageRowCountLimit, minRecordToWait, rowCountForNextRowCountCheck);
+    minRecordToWait = counts[0];
+    rowCountForNextRowCountCheck = counts[1];
+
+    if (minRecordToWait == Long.MAX_VALUE) {
+      minRecordToWait = props.getMinRowCountForPageSizeCheck();
+    }
+    updateRowCountSizeCheck(minRecordToWait, rowCountForNextRowCountCheck);
+  }
+
+  private long[] checkColumn(ColumnWriterBase writer, int pageRowCountLimit, long minRecordToWait, long rowCountForNextRowCountCheck) {
+    long usedMem = writer.getCurrentPageBufferedSize();
+    long rows = rowCount - writer.getRowsWrittenSoFar();
+    long remainingMem = props.getPageSizeThreshold() - usedMem;
+    if (remainingMem <= thresholdTolerance || rows >= pageRowCountLimit) {
+      writer.writePage();
+      remainingMem = props.getPageSizeThreshold();
+    } else {
+      rowCountForNextRowCountCheck = min(rowCountForNextRowCountCheck, writer.getRowsWrittenSoFar() + pageRowCountLimit);
+    }
+    long rowsToFillPage =
+      usedMem == 0 ?
+        props.getMaxRowCountForPageSizeCheck()
+        : (long) rows / usedMem * remainingMem;
+    if (rowsToFillPage < minRecordToWait) {
+      minRecordToWait = rowsToFillPage;
+    }
+
+    long[] ret = {minRecordToWait, rowCountForNextRowCountCheck};
+    return ret;
+  }
+
+  private void updateRowCountSizeCheck(long minRecordToWait, long rowCountForNextRowCountCheck){
     if (props.estimateNextSizeCheck()) {
       // will check again halfway if between min and max
       rowCountForNextSizeCheck = rowCount +
-          min(
-              max(minRecordToWait / 2, props.getMinRowCountForPageSizeCheck()),
-              props.getMaxRowCountForPageSizeCheck());
+        min(
+          max(minRecordToWait / 2, props.getMinRowCountForPageSizeCheck()),
+          props.getMaxRowCountForPageSizeCheck());
     } else {
       rowCountForNextSizeCheck = rowCount + props.getMinRowCountForPageSizeCheck();
     }
