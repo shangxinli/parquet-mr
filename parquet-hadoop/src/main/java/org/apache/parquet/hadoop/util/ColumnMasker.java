@@ -51,11 +51,14 @@ import org.apache.parquet.io.ParquetEncodingException;
 import org.apache.parquet.io.api.Converter;
 import org.apache.parquet.io.api.GroupConverter;
 import org.apache.parquet.io.api.PrimitiveConverter;
+import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
+import javax.management.Descriptor;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -132,25 +135,15 @@ public class ColumnMasker {
     ParquetProperties props = ParquetProperties.builder()
       .withWriterVersion(writerVersion)
       .build();
-
     CodecFactory codecFactory = new CodecFactory(new Configuration(), props.getPageSizeThreshold());
     CodecFactory.BytesCompressor compressor =	codecFactory.getCompressor(chunk.getCodec());
-
-    /*Type columnType = schema.getType(descriptor.getPath());
-    MessageType newSchema = new MessageType(columnType.getName(), columnType);
-
-    ColumnChunkPageWriteStore columnChunkPageWriteStore = new ColumnChunkPageWriteStore(compressor, newSchema, props.getAllocator(),
+    
+    // Create new schema which only has the current column
+    MessageType newSchema = newSchema(schema, descriptor);
+    ColumnChunkPageWriteStore cPageStore = new ColumnChunkPageWriteStore(compressor, newSchema, props.getAllocator(),
     props.getColumnIndexTruncateLength());
-
-    ColumnWriteStore cStore = props.newColumnWriteStore(newSchema, columnChunkPageWriteStore);
-    ColumnWriter cWriter = cStore.getColumnWriter(descriptor); */
-
-    ColumnChunkPageWriteStore columnChunkPageWriteStore = new ColumnChunkPageWriteStore(compressor, schema, props.getAllocator(),
-      props.getColumnIndexTruncateLength());
-
-    ColumnWriteStore cStore = props.newColumnWriteStore(schema, columnChunkPageWriteStore);
+    ColumnWriteStore cStore = props.newColumnWriteStore(newSchema, cPageStore);
     ColumnWriter cWriter = cStore.getColumnWriter(descriptor);
-
 
     for (int i = 0; i < totalChunkValues; i++) {
       int rlvl = cReader.getCurrentRepetitionLevel();
@@ -169,21 +162,54 @@ public class ColumnMasker {
       }
       cStore.endRecord();
     }
-    cStore.flushColumn(descriptor);
-    columnChunkPageWriteStore.flushColumnToFileWriter(writer, descriptor);
-  }
 
-  private Statistics convertStatisticsNullify(PrimitiveType type, long rowCount) throws IOException {
-    org.apache.parquet.column.statistics.Statistics.Builder statsBuilder = org.apache.parquet.column.statistics.Statistics.getBuilderForReading(type);
-    statsBuilder.withNumNulls(rowCount);
-    return statsBuilder.build();
-  }
+    cStore.flush();
+    cPageStore.flushToFileWriter(writer);
 
-  private int toIntWithCheck(long size) {
-    if ((int)size != size) {
-      throw new ParquetEncodingException("size is bigger than " + Integer.MAX_VALUE + " bytes: " + size);
+    cStore.close();
+    cWriter.close();
+  }
+  
+  private MessageType newSchema(MessageType schema, ColumnDescriptor descriptor) {
+    String[] path = descriptor.getPath();
+    Type type = schema.getType(path);
+    if (path.length == 1) {
+      return new MessageType(schema.getName(), type);
     }
-    return (int)size;
+
+    for (Type field : schema.getFields()) {
+      if (!field.isPrimitive()) {
+        Type newType = extractField(field.asGroupType(), type);
+        if (newType != null) {
+          return new MessageType(schema.getName(), newType);
+        }
+      }
+    }
+
+    // We should never hit this because 'type' is returned by schema.getType().
+    throw new RuntimeException("No field is found");
+  }
+
+  private Type extractField(GroupType candidate, Type targetField) {
+    if (targetField.equals(candidate)) {
+      return targetField;
+    }
+
+    // In case 'type' is a descendants of candidate
+    for (Type field : candidate.asGroupType().getFields()) {
+      if (field.isPrimitive()) {
+        if (field.equals(targetField)) {
+          return new GroupType(candidate.getRepetition(), candidate.getName(), targetField);
+        }
+      } else {
+        Type tempField = extractField(field.asGroupType(), targetField);
+        if (tempField != null) {
+          return tempField;
+        }
+      }
+    }
+
+    return null;
   }
 
   public static Set<ColumnPath> convertToColumnPaths(List<String> cols) {

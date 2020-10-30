@@ -34,8 +34,6 @@ public interface ColumnWriteStore {
    */
   abstract public void flush();
 
-  abstract void flushColumn(ColumnDescriptor path);
-
   /**
    * called to notify of record boundaries
    */

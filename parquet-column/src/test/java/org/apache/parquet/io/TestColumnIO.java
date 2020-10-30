@@ -698,10 +698,6 @@ final class ValidatingColumnWriteStore implements ColumnWriteStore {
   }
 
   @Override
-  public void flushColumn(ColumnDescriptor path) {
-  }
-
-  @Override
   public long getAllocatedSize() {
     return 0;
   }

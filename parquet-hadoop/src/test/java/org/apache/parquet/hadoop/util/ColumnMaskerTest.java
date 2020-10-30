@@ -122,7 +122,9 @@ public class ColumnMaskerTest {
     paths.add("Links.Backward");
     try (TransParquetFileReader reader = new TransParquetFileReader(HadoopInputFile.fromPath(inPath, conf), HadoopReadOptions.builder(conf).build())) {
       columnMasker.processBlocks(reader, writer, metaData, schema, paths, ColumnMasker.MaskMode.NULLIFY);
-    } finally {
+    } catch (Exception e) {
+      System.out.println(e);
+    }finally {
       writer.end(metaData.getFileMetaData().getKeyValueMetaData());
     }
   }

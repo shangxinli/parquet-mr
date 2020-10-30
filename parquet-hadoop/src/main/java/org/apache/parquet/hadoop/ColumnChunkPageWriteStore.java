@@ -456,9 +456,4 @@ public class ColumnChunkPageWriteStore implements PageWriteStore, BloomFilterWri
       pageWriter.writeToFileWriter(writer);
     }
   }
-
-  public void flushColumnToFileWriter(ParquetFileWriter writer, ColumnDescriptor path) throws IOException {
-    ColumnChunkPageWriter pageWriter = writers.get(path);
-    pageWriter.writeToFileWriter(writer);
-  }
 }
