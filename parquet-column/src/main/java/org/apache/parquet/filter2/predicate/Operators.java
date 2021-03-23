@@ -24,6 +24,7 @@ import java.util.Objects;
 
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.schema.Type;
 
 /**
  * These are the operators in a filter predicate expression tree.
@@ -33,16 +34,26 @@ public final class Operators {
   private Operators() { }
 
   public static abstract class Column<T extends Comparable<T>> implements Serializable {
-    private final ColumnPath columnPath;
     private final Class<T> columnType;
+    private Type.ID columnId  = null;
+    private ColumnPath columnPath = null;
+
+    protected Column(Type.ID columnId, Class<T> columnType) {
+      this.columnId = columnId;
+      this.columnType = Objects.requireNonNull(columnType, "columnType cannot be null");
+    }
 
     protected Column(ColumnPath columnPath, Class<T> columnType) {
-      this.columnPath = Objects.requireNonNull(columnPath, "columnPath cannot be null");;
-      this.columnType = Objects.requireNonNull(columnType, "columnType cannot be null");;
+      this.columnPath = columnPath;
+      this.columnType = Objects.requireNonNull(columnType, "columnType cannot be null");
     }
 
     public Class<T> getColumnType() {
       return columnType;
+    }
+
+    public Type.ID getColumnId() {
+      return columnId;
     }
 
     public ColumnPath getColumnPath() {
@@ -51,7 +62,7 @@ public final class Operators {
 
     @Override
     public String toString() {
-      return "column(" + columnPath.toDotString() + ")";
+      return "column(" + columnId + ")";
     }
 
     @Override
@@ -62,14 +73,12 @@ public final class Operators {
       Column column = (Column) o;
 
       if (!columnType.equals(column.columnType)) return false;
-      if (!columnPath.equals(column.columnPath)) return false;
-
-      return true;
+      return columnId.equals(column.columnId);
     }
 
     @Override
     public int hashCode() {
-      int result = columnPath.hashCode();
+      int result = columnId.hashCode();
       result = 31 * result + columnType.hashCode();
       return result;
     }
@@ -79,38 +88,38 @@ public final class Operators {
   public static interface SupportsLtGt extends SupportsEqNotEq { } // marker for columns that can be used with lt(), ltEq(), gt(), gtEq()
 
   public static final class IntColumn extends Column<Integer> implements SupportsLtGt {
-    IntColumn(ColumnPath columnPath) {
-      super(columnPath, Integer.class);
+    IntColumn(Type.ID columnId) {
+      super(columnId, Integer.class);
     }
   }
 
   public static final class LongColumn extends Column<Long> implements SupportsLtGt {
-    LongColumn(ColumnPath columnPath) {
-      super(columnPath, Long.class);
+    LongColumn(Type.ID columnId) {
+      super(columnId, Long.class);
     }
   }
 
   public static final class DoubleColumn extends Column<Double> implements SupportsLtGt {
-    DoubleColumn(ColumnPath columnPath) {
-      super(columnPath, Double.class);
+    DoubleColumn(Type.ID columnId) {
+      super(columnId, Double.class);
     }
   }
 
   public static final class FloatColumn extends Column<Float> implements SupportsLtGt {
-    FloatColumn(ColumnPath columnPath) {
-      super(columnPath, Float.class);
+    FloatColumn(Type.ID columnId) {
+      super(columnId, Float.class);
     }
   }
 
   public static final class BooleanColumn extends Column<Boolean> implements SupportsEqNotEq {
-    BooleanColumn(ColumnPath columnPath) {
-      super(columnPath, Boolean.class);
+    BooleanColumn(Type.ID columnId) {
+      super(columnId, Boolean.class);
     }
   }
 
   public static final class BinaryColumn extends Column<Binary> implements SupportsLtGt {
-    BinaryColumn(ColumnPath columnPath) {
-      super(columnPath, Binary.class);
+    BinaryColumn(Type.ID columnId) {
+      super(columnId, Binary.class);
     }
   }
 
@@ -128,7 +137,7 @@ public final class Operators {
       this.value = value;
 
       String name = getClass().getSimpleName().toLowerCase(Locale.ENGLISH);
-      this.toString = name + "(" + column.getColumnPath().toDotString() + ", " + value + ")";
+      this.toString = name + "(" + column.getColumnId() + ", " + value + ")";
     }
 
     public Column<T> getColumn() {
@@ -385,7 +394,7 @@ public final class Operators {
       super(column);
       this.udpClass = Objects.requireNonNull(udpClass, "udpClass cannot be null");
       String name = getClass().getSimpleName().toLowerCase(Locale.ENGLISH);
-      this.toString = name + "(" + column.getColumnPath().toDotString() + ", " + udpClass.getName() + ")";
+      this.toString = name + "(" + column.getColumnId() + ", " + udpClass.getName() + ")";
 
       // defensively try to instantiate the class early to make sure that it's possible
       getUserDefinedPredicate();
@@ -439,7 +448,7 @@ public final class Operators {
       super(column);
       this.udpInstance = Objects.requireNonNull(udpInstance, "udpInstance cannot be null");
       String name = getClass().getSimpleName().toLowerCase(Locale.ENGLISH);
-      this.toString = name + "(" + column.getColumnPath().toDotString() + ", " + udpInstance + ")";
+      this.toString = name + "(" + column.getColumnId() + ", " + udpInstance + ")";
     }
 
     @Override

@@ -22,6 +22,7 @@ import org.apache.parquet.ParquetRuntimeException;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.internal.column.columnindex.ColumnIndex;
 import org.apache.parquet.internal.column.columnindex.OffsetIndex;
+import org.apache.parquet.schema.Type;
 
 /**
  * Provides the {@link ColumnIndex} and {@link OffsetIndex} objects for a row-group.
@@ -32,8 +33,8 @@ public interface ColumnIndexStore {
    * Exception thrown in case of an offset index is missing for any of the columns.
    */
   public static class MissingOffsetIndexException extends ParquetRuntimeException {
-    public MissingOffsetIndexException(ColumnPath path) {
-      super("No offset index for column " + path.toDotString() + " is available; Unable to do filtering");
+    public MissingOffsetIndexException(Type.ID id) {
+      super("No offset index for column " + id + " is available; Unable to do filtering");
     }
   }
 
@@ -42,7 +43,7 @@ public interface ColumnIndexStore {
    *          the path of the column
    * @return the column index for the column-chunk in the row-group or {@code null} if no column index is available
    */
-  ColumnIndex getColumnIndex(ColumnPath column);
+  ColumnIndex getColumnIndex(Type.ID column);
 
   /**
    * @param column
@@ -51,5 +52,5 @@ public interface ColumnIndexStore {
    * @throws MissingOffsetIndexException
    *           if the related offset index is missing
    */
-  OffsetIndex getOffsetIndex(ColumnPath column) throws MissingOffsetIndexException;
+  OffsetIndex getOffsetIndex(Type.ID column) throws MissingOffsetIndexException;
 }

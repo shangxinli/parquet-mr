@@ -33,6 +33,7 @@ import org.apache.parquet.internal.column.columnindex.OffsetIndex;
 import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.parquet.schema.Type;
 
 /**
  * Internal implementation of {@link ColumnIndexStore}.
@@ -63,7 +64,7 @@ class ColumnIndexStoreImpl implements ColumnIndexStore {
         oi = null;
       }
       if (oi == null) {
-        throw new MissingOffsetIndexException(meta.getPath());
+        throw new MissingOffsetIndexException(meta.getId());
       }
       offsetIndex = oi;
     }
@@ -104,18 +105,18 @@ class ColumnIndexStoreImpl implements ColumnIndexStore {
   };
   private static final ColumnIndexStoreImpl EMPTY = new ColumnIndexStoreImpl(null, new BlockMetaData(), emptySet()) {
     @Override
-    public ColumnIndex getColumnIndex(ColumnPath column) {
+    public ColumnIndex getColumnIndex(Type.ID column) {
       return null;
     }
 
     @Override
-    public OffsetIndex getOffsetIndex(ColumnPath column) {
+    public OffsetIndex getOffsetIndex(Type.ID column) {
       throw new MissingOffsetIndexException(column);
     }
   };
 
   private final ParquetFileReader reader;
-  private final Map<ColumnPath, IndexStore> store;
+  private final Map<Type.ID, IndexStore> store;
 
   /*
    * Creates a column index store which lazily reads column/offset indexes for the columns in paths. (paths are the set
@@ -133,23 +134,23 @@ class ColumnIndexStoreImpl implements ColumnIndexStore {
     // TODO[GS]: Offset index for every paths will be required; pre-read the consecutive ones at once?
     // TODO[GS]: Pre-read column index based on filter?
     this.reader = reader;
-    Map<ColumnPath, IndexStore> store = new HashMap<>();
+    Map<Type.ID, IndexStore> store = new HashMap<>();
     for (ColumnChunkMetaData column : block.getColumns()) {
-      ColumnPath path = column.getPath();
-      if (paths.contains(path)) {
-        store.put(path, new IndexStoreImpl(column));
+      Type.ID id = column.getId();
+      if (paths.contains(id)) {
+        store.put(id, new IndexStoreImpl(column));
       }
     }
     this.store = store;
   }
 
   @Override
-  public ColumnIndex getColumnIndex(ColumnPath column) {
-    return store.getOrDefault(column, MISSING_INDEX_STORE).getColumnIndex();
+  public ColumnIndex getColumnIndex(Type.ID id) {
+    return store.getOrDefault(id, MISSING_INDEX_STORE).getColumnIndex();
   }
 
   @Override
-  public OffsetIndex getOffsetIndex(ColumnPath column) {
-    return store.getOrDefault(column, MISSING_INDEX_STORE).getOffsetIndex();
+  public OffsetIndex getOffsetIndex(Type.ID id) {
+    return store.getOrDefault(id, MISSING_INDEX_STORE).getOffsetIndex();
   }
 }

@@ -30,6 +30,7 @@ import org.apache.parquet.schema.Type;
 public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
 
   private final String[] path;
+  private final Type.ID id;
   private final PrimitiveType type;
   private final int maxRep;
   private final int maxDef;
@@ -48,6 +49,11 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
     this(path, type, 0, maxRep, maxDef);
   }
 
+  public ColumnDescriptor(Type.ID id, PrimitiveTypeName type, int maxRep,
+                          int maxDef) {
+    this(id, type, 0, maxRep, maxDef);
+  }
+
   /**
    *
    * @param path the path to the leaf field in the schema
@@ -64,13 +70,33 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
   }
 
   /**
+   *
+   * @param id the id to the leaf field in the schema
+   * @param type the type of the field
+   * @param typeLength the length of the type, if type is a fixed-length byte array
+   * @param maxRep the maximum repetition level for that path
+   * @param maxDef the maximum definition level for that path
+   * @deprecated will be removed in 2.0.0; Use {@link #ColumnDescriptor(String[], PrimitiveType, int, int)}
+   */
+  @Deprecated
+  public ColumnDescriptor(Type.ID id, PrimitiveTypeName type,
+                          int typeLength, int maxRep, int maxDef) {
+    this(null, id, new PrimitiveType(Type.Repetition.OPTIONAL, type, typeLength,""), maxRep, maxDef);
+  }
+
+  /**
    * @param path the path to the leaf field in the schema
    * @param type the type of the field
    * @param maxRep the maximum repetition level for that path
    * @param maxDef the maximum definition level for that path
    */
   public ColumnDescriptor(String[] path, PrimitiveType type, int maxRep, int maxDef) {
+    this(path, null, type, maxRep, maxDef);
+  }
+
+  public ColumnDescriptor(String[] path, Type.ID id, PrimitiveType type, int maxRep, int maxDef) {
     this.path = path;
+    this.id = id;
     this.type = type;
     this.maxRep = maxRep;
     this.maxDef = maxDef;

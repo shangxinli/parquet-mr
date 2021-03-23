@@ -44,6 +44,7 @@ import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.internal.column.columnindex.ColumnIndex;
 import org.apache.parquet.internal.column.columnindex.OffsetIndex;
 import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore.MissingOffsetIndexException;
+import org.apache.parquet.schema.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +58,7 @@ public class ColumnIndexFilter implements Visitor<RowRanges> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ColumnIndexFilter.class);
   private final ColumnIndexStore columnIndexStore;
-  private final Set<ColumnPath> columns;
+  private final Set<Type.ID> columns;
   private final long rowCount;
   private RowRanges allRows;
 
@@ -102,9 +103,9 @@ public class ColumnIndexFilter implements Visitor<RowRanges> {
     });
   }
 
-  private ColumnIndexFilter(ColumnIndexStore columnIndexStore, Set<ColumnPath> paths, long rowCount) {
+  private ColumnIndexFilter(ColumnIndexStore columnIndexStore, Set<Type.ID> ids, long rowCount) {
     this.columnIndexStore = columnIndexStore;
-    this.columns = paths;
+    this.columns = ids;
     this.rowCount = rowCount;
   }
 
@@ -161,8 +162,8 @@ public class ColumnIndexFilter implements Visitor<RowRanges> {
 
   private RowRanges applyPredicate(Column<?> column, Function<ColumnIndex, PrimitiveIterator.OfInt> func,
       RowRanges rangesForMissingColumns) {
-    ColumnPath columnPath = column.getColumnPath();
-    if (!columns.contains(columnPath)) {
+    Type.ID columnId = column.getColumnId();
+    if (!columns.contains(columnId)) {
       return rangesForMissingColumns;
     }
 

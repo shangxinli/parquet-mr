@@ -24,6 +24,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
+import org.apache.parquet.schema.Type;
 import org.junit.Test;
 
 import org.apache.parquet.hadoop.metadata.ColumnPath;
@@ -57,7 +58,7 @@ import static org.apache.parquet.filter2.predicate.Operators.NotEq;
 
 public class TestFilterApiMethods {
 
-  private static final IntColumn intColumn = intColumn("a.b.c");
+  private static final IntColumn intColumn = intColumn("a.b.c", new Type.ID(1));
   private static final LongColumn longColumn = longColumn("a.b.l");
   private static final DoubleColumn doubleColumn = doubleColumn("x.y.z");
   private static final BinaryColumn binColumn = binaryColumn("a.string.column");

@@ -42,6 +42,7 @@ import org.apache.parquet.filter2.predicate.Operators.SupportsLtGt;
 import org.apache.parquet.filter2.predicate.Operators.UserDefined;
 import org.apache.parquet.filter2.predicate.Operators.UserDefinedByClass;
 import org.apache.parquet.filter2.predicate.Operators.UserDefinedByInstance;
+import org.apache.parquet.schema.Type;
 
 /**
  * The Filter API is expressed through these static methods.
@@ -68,6 +69,11 @@ public final class FilterApi {
   public static IntColumn intColumn(String columnPath) {
     return new IntColumn(ColumnPath.fromDotString(columnPath));
   }
+
+  public static IntColumn intColumn(String columnPath, Type.ID id) {
+    return new IntColumn(ColumnPath.fromDotString(columnPath), id);
+  }
+
 
   public static LongColumn longColumn(String columnPath) {
     return new LongColumn(ColumnPath.fromDotString(columnPath));

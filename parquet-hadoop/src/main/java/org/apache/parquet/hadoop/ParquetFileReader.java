@@ -113,6 +113,7 @@ import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
+import org.apache.parquet.schema.Type;
 import org.apache.yetus.audience.InterfaceAudience.Private;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -660,7 +661,8 @@ public class ParquetFileReader implements Closeable {
   protected final SeekableInputStream f;
   private final InputFile file;
   private final ParquetReadOptions options;
-  private final Map<ColumnPath, ColumnDescriptor> paths = new HashMap<>();
+  //private final Map<ColumnPath, ColumnDescriptor> paths = new HashMap<>();
+  private final Map<Type.ID, ColumnDescriptor> ids = new HashMap<>();
   private final FileMetaData fileMetaData; // may be null
   private final List<BlockMetaData> blocks;
   private final List<ColumnIndexStore> blockIndexStores;
@@ -718,7 +720,7 @@ public class ParquetFileReader implements Closeable {
     this.blockIndexStores = listWithNulls(this.blocks.size());
     this.blockRowRanges = listWithNulls(this.blocks.size());
     for (ColumnDescriptor col : columns) {
-      paths.put(ColumnPath.get(col.getPath()), col);
+      ids.put(ColumnPath.get(col.g()), col);
     }
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
   }

@@ -49,8 +49,13 @@ public class ColumnChunkProperties {
     return properties.canonicalize(new ColumnChunkProperties(codec, path, type, encodings));
   }
 
+  public static ColumnChunkProperties get(Type.ID id, PrimitiveType type, CompressionCodecName codec,
+                                          Set<Encoding> encodings) {
+    return properties.canonicalize(new ColumnChunkProperties(codec, id, type, encodings));
+  }
   private final CompressionCodecName codec;
   private final ColumnPath path;
+  private final Type.ID id;
   private final PrimitiveType type;
   private final Set<Encoding> encodings;
 
@@ -58,9 +63,25 @@ public class ColumnChunkProperties {
                                 ColumnPath path,
                                 PrimitiveType type,
                                 Set<Encoding> encodings) {
+    this(codec, path, null, type, encodings);
+  }
+
+  private ColumnChunkProperties(CompressionCodecName codec,
+                                Type.ID id,
+                                PrimitiveType type,
+                                Set<Encoding> encodings) {
+    this(codec, null, id, type, encodings);
+  }
+
+  private ColumnChunkProperties(CompressionCodecName codec,
+                                ColumnPath path,
+                                Type.ID id,
+                                PrimitiveType type,
+                                Set<Encoding> encodings) {
     super();
     this.codec = codec;
     this.path = path;
+    this.id = id;
     this.type = type;
     this.encodings = encodings;
   }
@@ -71,6 +92,10 @@ public class ColumnChunkProperties {
 
   public ColumnPath getPath() {
     return path;
+  }
+
+  public Type.ID getId() {
+    return id;
   }
 
   /**
